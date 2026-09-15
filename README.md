@@ -269,3 +269,19 @@ Copy-Item .\backups\2026-08-09\* .\data\ -Recurse -Force
 
 Der Grund: Verlosungsgewinner, Rechte und beigebrachtes Wissen sind nirgends
 sonst ableitbar. Das Eventarchiv auch nicht.
+
+## Mitmachen
+
+Pull Requests sind willkommen. Ein paar Dinge, die hier gelten:
+
+- Code-Kommentare, Commit-Texte und neue Variablennamen auf Deutsch, Umlaute
+  in Kommentaren umschrieben (`fuer` statt `für`).
+- Kein Framework, ein Thema pro Datei — beim Anfassen eines Moduls nicht
+  gleich die ganze Datei umbauen.
+- Vor jeder Aenderung an Modellen, Bildern oder Erkennungsraten: gegen eine
+  feste Stichprobe messen, nicht vermuten. Mehrere Beispiele dafuer, warum das
+  wichtig ist, stehen in `CLAUDE.md`.
+- `npm test` muss durchlaufen, bevor ein PR sinnvoll ist — laeuft bei jedem
+  PR automatisch mit (siehe `.github/workflows/test.yml`).
+- Der Modelltest wird uebersprungen, wenn kein Ollama erreichbar ist — auch in
+  der CI ist das normal, kein Fehler.
