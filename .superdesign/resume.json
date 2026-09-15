@@ -1,0 +1,16 @@
+{
+  "targets": {
+    "dashboard": {
+      "kind": "brand-new-project",
+      "projectId": "05ce82d0-e52d-419e-b01c-dcc976735747",
+      "activeDraftId": "715af898-e9f3-4b4d-8f93-4e383ff5d482",
+      "baselineDraftId": null,
+      "branchDraftIds": {
+        "holographic-schematic": "c68ede96-8780-47f5-90fe-6b1b04a87915"
+      },
+      "title": "Ghostxx Jarvis Cockpit",
+      "contextFiles": [".superdesign/design-system.md"],
+      "notes": "Brand-new no-codebase design (dashboard-seite.js has no HTML/CSS files / frontend deps, so treated as no-codebase path). Design system built from real dashboard-seite.js CSS tokens + 'neural-noir-interface-style' library prompt for glassmorphism/glow technique only (palette overridden to existing cyan/navy, not gold)."
+    }
+  }
+}

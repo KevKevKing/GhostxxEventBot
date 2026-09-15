@@ -1,0 +1,38 @@
+node_modules/
+.env
+env
+data/*.json
+!data/.gitkeep
+logs/
+backups/
+
+# Echte Personendaten und Zwischenstaende - dieselben Inhalte wie data/*.json,
+# nur historisch. Gehoert aus demselben Grund nie ins Repo.
+data/archive/
+
+# Electron-Buildzeug fuers Dashboard-Fenster - Abhaengigkeiten und
+# Installer-Cache, zusammen ueber 1 GB, gehoert nie ins Repo.
+desktop-app/node_modules/
+desktop-app/dist/
+desktop-app/.buildcache/
+desktop-app/build.log
+
+# Claude Codes eigene lokale Einstellungen - kein Projektcode.
+.claude/
+
+# Echte Discord-Screenshots aus dem Server - Familiennamen, Spielerzahlen,
+# teils echte Namen. Dieselbe Kategorie wie data/*.json, nur als Bild.
+# Die Messskripte selbst (.js) sind unproblematisch und bleiben drin.
+pruefstichprobe/*.png
+pruefstichprobe/*.PNG
+pruefstichprobe/*.jpg
+pruefstichprobe/*.JPG
+pruefstichprobe/*.jpeg
+pruefstichprobe/*.url
+pruefstichprobe/wahrheit.json
+
+# Diese zwei Skripte haben echte Spielernamen als Kommentare bei den
+# Kanal-IDs stehen und funktionieren ohnehin nur mit den oben schon
+# ausgeschlossenen echten Bildern - raus aus demselben Grund.
+pruefstichprobe/schiene2-alle-bilder.js
+pruefstichprobe/wappen-sammeln.js
