@@ -18,25 +18,6 @@ Was er kann, im Ueberblick:
 | Server- und Bot-Logs | [Logging](#logging) |
 | Taegliche Sicherung | [Sicherungen](#sicherungen) |
 
-## Start
-
-1. Token in `.env` eintragen:
-
-```env
-DISCORD_TOKEN=dein-neuer-bot-token
-```
-
-Die vorhandene Datei `env` mit einem reinen Token wird ebenfalls unterstuetzt.
-
-2. Commands registrieren und Bot starten:
-
-```powershell
-npm run deploy
-npm start
-```
-
-`npm start` registriert die Slash-Commands automatisch und startet danach die Event-Schleife.
-
 ## Bot steuern
 
 ```powershell
