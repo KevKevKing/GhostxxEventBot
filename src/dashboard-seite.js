@@ -425,15 +425,15 @@ const HTML = String.raw`<!doctype html>
       </div>
 
       <div class="karte">
-        <h2>In seinem Kopf</h2>
-        <div id="geplant"></div>
+        <h2>Steuerzentrale</h2>
+        <div id="steuerung"></div>
       </div>
 
       <div class="karte">
-        <h2>Mit Ghostxx sprechen</h2>
-        <div class="chatverlauf" id="chatverlauf"><div class="nichts">Schreib ihm einfach.</div></div>
+        <h2>GhostxxCode — Coding-Helfer</h2>
+        <div class="chatverlauf" id="chatverlauf"><div class="nichts">Frag ihn was zum Code.</div></div>
         <form class="chatformular" id="chatformular">
-          <input id="chattext" maxlength="1200" autocomplete="off" placeholder="Was möchtest du wissen?">
+          <input id="chattext" maxlength="1200" autocomplete="off" placeholder="Frage zum Code…">
           <button type="submit">Senden</button>
         </form>
       </div>
@@ -467,11 +467,6 @@ const HTML = String.raw`<!doctype html>
     </div>
 
     <div class="spalte">
-      <div class="karte">
-        <h2>Steuerzentrale</h2>
-        <div id="steuerung"></div>
-      </div>
-
       <div class="karte" id="karte-fragen" style="display:none">
         <h2>Er fragt</h2>
         <div id="fragen"></div>
@@ -827,7 +822,7 @@ const dashboardChat = [];
 function zeichneDashboardChat() {
   $('chatverlauf').innerHTML = dashboardChat.length
     ? dashboardChat.map((z) => '<div class="chatzeile ' + z.rolle + '"><b>' + (z.rolle === 'ghost' ? 'Ghostxx' : 'Du') + '</b>' + sicher(z.text) + '</div>').join('')
-    : '<div class="nichts">Schreib ihm einfach.</div>';
+    : '<div class="nichts">Frag ihn was zum Code.</div>';
   $('chatverlauf').scrollTop = $('chatverlauf').scrollHeight;
 }
 
@@ -946,24 +941,6 @@ async function laden() {
   $('anmeldungen').innerHTML = zeichneAnmeldungen(d.anmeldungen);
   $('logbuch').innerHTML = zeichneLogbuch(d.logbuch, d);
   zeichneSteuerung(d.schalter || {});
-
-  const g = d.geplant;
-  $('geplant').innerHTML = '<table>'
-    + g.naechste.map((n) => '<tr><td>' + sicher(n.was) + '</td>'
-      + '<td class="zahl leise">' + sicher(n.uhrzeit)
-      + (n.inMin != null ? ' <span class="bald">in ' + n.inMin + ' Min</span>' : ' <span class="leise">war schon</span>')
-      + '</td></tr>').join('')
-    + (g.heuteBesonders.length
-      ? g.heuteBesonders.map((e) => '<tr><td colspan="2" class="leise">heute außerdem: ' + sicher(e) + '</td></tr>').join('')
-      : '<tr><td colspan="2" class="leise">heute nur das normale Programm</td></tr>')
-    + '</table>'
-    + (g.anwaerter.length
-      ? '<h2 style="margin:16px 0 8px">Kurz vor einem Meilenstein</h2><table>'
-        + g.anwaerter.map((a) => '<tr><td>' + sicher(a.name) + '</td>'
-          + '<td class="zahl leise">' + a.jetzt + '</td>'
-          + '<td class="zahl">noch ' + a.fehlt + ' bis ' + a.ziel + '</td></tr>').join('')
-        + '</table>'
-      : '');
 
   $('aktivitaet').innerHTML = d.aktivitaet.length
     ? d.aktivitaet.slice(0, 25).map((a) =>

@@ -99,6 +99,18 @@ function startDashboard(client) {
 
       // Der Dashboard-Chat kann nur reden. Er bekommt keine Werkzeuge und
       // kann damit weder Events noch Dateien oder Discord veraendern.
+      //
+      // Eigenes Modell seit dem 16.09.: qwen2.5-coder:7b statt dem normalen
+      // Chat-Modell. Kevins Wunsch war ein Coding-Helfer fuer dieses Projekt
+      // direkt im Dashboard ("GhostxxCode"). Gemessen gegen qwen2.5-coder:14b
+      // und codellama an zwei echten Aufgaben aus diesem Code: das 7b war
+      // bei beiden richtig, am schnellsten, und passt mit 4,7 GB neben Chat-
+      // und OCR-Modell auf die Grafikkarte - das 14b (9 GB) verdraengt beim
+      // Laden alles andere, das codellama-Ergebnis haette an einer echten
+      // Stelle im Code (nicht aufgeloeste Mitglieder-ID) sogar abstuerzen
+      // koennen. Bleibt trotzdem reines Reden - kein Zugriff auf Dateien.
+      const CODING_MODELL = 'qwen2.5-coder:7b';
+
       if (req.url === '/api/chat' && req.method === 'POST') {
         const roh = await new Promise((fertig) => {
           let daten = '';
@@ -114,12 +126,21 @@ function startDashboard(client) {
         const frage = String(text || '').trim().slice(0, 1200);
         if (!frage) throw new Error('Keine Nachricht eingegeben.');
         const antwort = await chat({
+          model: CODING_MODELL,
           messages: [
-            { role: 'system', content: 'Du bist Ghostxx aus der Familie Unknown. Antworte kurz, direkt und auf Deutsch. Du bist im Dashboard und kannst hier nur reden, keine Aktionen ausfuehren.' },
+            {
+              role: 'system',
+              content: 'Du bist der Coding-Helfer fuer das Projekt "Ghostxx" (ein deutschsprachiger '
+                + 'Discord-Bot, Node.js, kein Framework, ein Thema pro Datei). Du hilfst Kevin, dem '
+                + 'Besitzer, Code zu verstehen und Aenderungen vorzuschlagen. Antworte auf Deutsch, '
+                + 'kurz und direkt, Code-Kommentare mit umschriebenen Umlauten (fuer statt für). '
+                + 'Du kannst hier nur reden, keine Datei wirklich aendern - schlage Code als Vorschlag '
+                + 'vor, den Kevin selbst uebernimmt oder mir (Claude Code) zum Umsetzen gibt.',
+            },
             { role: 'user', content: frage },
           ],
-          temperature: 0.4,
-          numPredict: 280,
+          temperature: 0.2,
+          numPredict: 600,
         });
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify(antwort.ok

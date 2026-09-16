@@ -109,7 +109,7 @@ const stiller = { guilds: { cache: new Map() } };
   check('ist HTML', html.startsWith('<!doctype html>'));
   // Kevins vier Bereiche: Terminal, Discord, Kopf, Laeufe - dazu Logbuch,
   // Fehler und Warnungen. Zwei davon hatte ich beim ersten Mal vergessen.
-  check('hat alle Bereiche', ['anmeldungen', 'logbuch', 'lauf', 'fehler', 'warnungen', 'geplant',
+  check('hat alle Bereiche', ['anmeldungen', 'logbuch', 'lauf', 'fehler', 'warnungen', 'steuerung',
     'terminal', 'aktivitaet', 'bilder', 'leiste', 'ring']
     .every((id) => html.includes(`id="${id}"`)));
 
