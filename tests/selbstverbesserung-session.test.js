@@ -1,5 +1,21 @@
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { check, equal, finish, section } = require('./lib');
 const session = require('../src/selbstverbesserung-session');
+
+// Das Modul legt bei injiziertem `ausfuehren` (hier im Test) echte temporaere
+// Verzeichnisse unter os.tmpdir() an (mkdir + writeFile), weil `git worktree
+// remove` in den Tests nur gemockt ist und nichts wirklich loescht. Am Ende
+// aufraeumen, damit keine "ghostxx-*"-Verzeichnisse im System-Temp liegen bleiben.
+function raeumeGhostxxTempAuf() {
+  const basis = os.tmpdir();
+  for (const eintrag of fs.readdirSync(basis)) {
+    if (eintrag.startsWith('ghostxx-')) {
+      fs.rmSync(path.join(basis, eintrag), { recursive: true, force: true });
+    }
+  }
+}
 
 section('Erfolgreicher Lauf ohne Tabu-Verstoss');
 (async () => {
@@ -46,5 +62,6 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
   check('Kein Push bei Tabu-Verstoss', !aufrufeTabu.some((a) => a.startsWith('git push')));
   check('Trotzdem aufgeraeumt', aufrufeTabu.some((a) => a.includes('worktree remove')));
 
+  raeumeGhostxxTempAuf();
   finish();
 })();

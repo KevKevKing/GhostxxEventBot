@@ -1,13 +1,19 @@
-const { spawn } = require('node:child_process');
+const { spawn, exec } = require('node:child_process');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const os = require('node:os');
 const { getBerlinDateStamp } = require('./time');
 
 // Stoesst eine non-interaktive Claude-Code-Session auf einem eigenen,
-// isolierten git-worktree an. Der Worktree ist die eigentliche Leitplanke
-// gegen "versehentlich den echten Bot doppelt starten" - er hat kein .env,
-// also keinen Token. Gegen main/Tabu-Bereiche wird zusaetzlich der
+// isolierten git-worktree an. Zwei Dinge sind TATSAECHLICH garantiert, mehr
+// nicht: (1) im Worktree liegt keine .env-Datei (gitignored, ein frischer
+// Checkout enthaelt sie nicht), (2) der Kindprozess bekommt ein bereinigtes
+// Environment ohne DISCORD_TOKEN/BOT_TOKEN/TOKEN (echtAusfuehren() filtert
+// das explizit heraus - ohne diesen Filter wuerde Node das komplette
+// process.env des laufenden Bots vererben, inklusive Token, egal ob im
+// Worktree eine .env liegt). Zusammen verhindert das, dass ein `node
+// src/index.js` im Worktree sich mit dem echten Token einloggen und den Bot
+// doppelt starten koennte. Gegen main/Tabu-Bereiche wird zusaetzlich der
 // tatsaechliche Diff geprueft, nicht nur der Prompt vertraut (Kevins
 // Leitplanken sollen technisch gelten, nicht nur behauptet werden).
 
@@ -16,6 +22,10 @@ const TABU_MUSTER = [
   'src/logbook', 'src/logbuch-', 'src/auszahlung-saetze.js',
   'src/giveaway', 'src/state-', '.env', 'env',
 ];
+
+// Namen, unter denen der echte Discord-Token in process.env stehen kann
+// (siehe getToken() in config.js). Werden vor jedem Kindprozess entfernt.
+const TOKEN_UMGEBUNGSVARIABLEN = ['DISCORD_TOKEN', 'BOT_TOKEN', 'TOKEN'];
 
 const TIMEOUT_MS = 20 * 60 * 1000;
 const wurzel = path.resolve(__dirname, '..');
@@ -28,19 +38,61 @@ function slug(titel) {
     .slice(0, 40) || 'problem';
 }
 
+function bereinigteUmgebung() {
+  const env = { ...process.env };
+  for (const name of TOKEN_UMGEBUNGSVARIABLEN) {
+    delete env[name];
+  }
+  return env;
+}
+
+function killeHartUnterWindows(pid) {
+  // p.kill() (SIGTERM) beendet unter Windows nur den direkten Kindprozess,
+  // nicht dessen eigene Unterprozesse (z.B. wenn die Claude-CLI selbst npm
+  // oder git startet) - die wuerden als Waisen weiterlaufen und sich die GPU
+  // mit GTA teilen. taskkill mit /T beendet den ganzen Prozessbaum.
+  exec(`taskkill /PID ${pid} /T /F`, () => {
+    // Fehler hier ignorieren - z.B. wenn der Prozess schon beendet ist.
+  });
+}
+
 function echtAusfuehren(cmd, args, options = {}) {
   return new Promise((resolve) => {
-    const p = spawn(cmd, args, { windowsHide: true, ...options });
+    let p;
+    try {
+      p = spawn(cmd, args, { windowsHide: true, ...options, env: options.env || bereinigteUmgebung() });
+    } catch (fehler) {
+      // Ein synchroner Wurf (z.B. bei kaputten Argumenten) soll nie das
+      // zurueckgegebene Promise rejecten - starteSession() erwartet immer
+      // {code, stdout, stderr}.
+      resolve({ code: -1, stdout: '', stderr: `Prozess konnte nicht gestartet werden: ${fehler.message}` });
+      return;
+    }
+
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
     const timer = setTimeout(() => {
-      p.kill();
+      timedOut = true;
+      if (process.platform === 'win32' && p.pid) {
+        killeHartUnterWindows(p.pid);
+      } else {
+        p.kill();
+      }
     }, options.timeoutMs || TIMEOUT_MS);
 
     p.stdout?.on('data', (d) => { stdout += d; });
     p.stderr?.on('data', (d) => { stderr += d; });
-    p.on('error', () => { clearTimeout(timer); resolve({ code: -1, stdout, stderr: 'Prozess konnte nicht gestartet werden' }); });
-    p.on('close', (code) => { clearTimeout(timer); resolve({ code, stdout, stderr }); });
+    p.on('error', () => { clearTimeout(timer); resolve({ code: -1, stdout, stderr: 'Prozess konnte nicht gestartet werden', timedOut }); });
+    p.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({
+        code,
+        stdout,
+        stderr: timedOut ? `Zeitueberschreitung nach ${Math.round((options.timeoutMs || TIMEOUT_MS) / 60000)} Minuten` : stderr,
+        timedOut,
+      });
+    });
   });
 }
 
@@ -72,6 +124,8 @@ Aenderung. Halte dich an CLAUDE.md in diesem Projekt (Sprache, Konventionen,
   es stattdessen nur in der Zusammenfassung, aendere nichts.
 - Fasse .env/env nicht an.
 - Fuehre restart-bot.ps1 oder stop-bot.ps1 nicht aus.
+- Starte den Bot nicht, auch nicht direkt mit \`node src/index.js\` oder
+  \`npm start\`.
 - Ein Problem, ein fokussierter Commit. Fuehre \`npm test\` aus und
   committe nur, wenn alle Tests bestehen.
 - Push NICHT selbst - das macht die aufrufende Automatisierung.
@@ -84,6 +138,12 @@ SELBSTVERBESSERUNG_ZUSAMMENFASSUNG.md im Projekt-Root.
 `;
 }
 
+// Diese Pruefung ist bewusst post-hoc: sie laeuft NACH dem Claude-Code-Lauf,
+// nicht in einer Sandbox waehrend dessen. Technisch koennte die Session
+// selbst pushen oder main veraendern, bevor diese Funktion ueberhaupt
+// aufgerufen wird. Das ist eine bewusste Design-Entscheidung (Diff-Pruefung
+// statt Prozess-Sandboxing) - das Restrisiko besteht und wird hier bewusst
+// nicht durch echtes Sandboxing geschlossen.
 async function pruefeTabu(worktreePfad, ausfuehren) {
   const diff = await ausfuehren('git', ['diff', '--name-only', 'main...HEAD'], { cwd: worktreePfad });
   const dateien = diff.stdout.split(/\r?\n/).map((z) => z.trim()).filter(Boolean);
@@ -131,7 +191,10 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
       : await leseZusammenfassungStandard(worktreePfad);
 
     if (lauf.code !== 0) {
-      return { ...ergebnis, zusammenfassung, fehler: `Claude-Code-Session fehlgeschlagen: ${lauf.stderr || lauf.code}` };
+      const fehlerText = lauf.timedOut
+        ? lauf.stderr
+        : `Claude-Code-Session fehlgeschlagen: ${lauf.stderr || lauf.code}`;
+      return { ...ergebnis, zusammenfassung, fehler: fehlerText };
     }
 
     const { treffer, dateien } = await pruefeTabu(worktreePfad, ausfuehren);
