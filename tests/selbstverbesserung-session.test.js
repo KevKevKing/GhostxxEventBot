@@ -127,7 +127,53 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
   check('Kein Push nach Einbruch', !aufrufeEinbruch.some((a) => a.startsWith('git push')));
   check('Trotzdem aufgeraeumt', aufrufeEinbruch.some((a) => a.includes('worktree remove')));
 
+  section('Geaendert aber nicht committet -> Kevin erfaehrt davon');
+  const rohAufrufeOffen = [];
+  const fakeAusfuehrenOffen = async (cmd, args, options = {}) => {
+    rohAufrufeOffen.push({ cmd, args });
+    if (cmd === 'git' && args[0] === 'status' && options.cwd && options.cwd.includes('ghostxx-')) {
+      // Status IM Worktree: es liegt etwas Uncommittetes herum.
+      return { code: 0, stdout: ' M src/etwas.js\n?? neu.js\n', stderr: '' };
+    }
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  const ergebnisOffen = await session.starteSession(
+    { titel: 'Nicht committet', belege: [] },
+    { ausfuehren: fakeAusfuehrenOffen, leseZusammenfassung: async () => '' },
+  );
+  check('Als nicht ok gemeldet', ergebnisOffen.ok === false);
+  check(
+    'Meldung nennt die verworfenen Aenderungen',
+    ergebnisOffen.fehler.includes('nicht committet') && ergebnisOffen.fehler.includes('verworfen'),
+    ergebnisOffen.fehler,
+  );
+
+  section('Token bleiben dem Kindprozess verborgen');
+  // Regressionstest: ohne diesen Filter erbt die Claude-Code-Session das
+  // komplette process.env des laufenden Bots - inklusive Discord-Token.
+  const vorher = {};
+  for (const name of ['DISCORD_TOKEN', 'BOT_TOKEN', 'TOKEN']) {
+    vorher[name] = process.env[name];
+    process.env[name] = `test-geheim-${name}`;
+  }
+  const umgebung = session.bereinigteUmgebung();
+  for (const name of ['DISCORD_TOKEN', 'BOT_TOKEN', 'TOKEN']) {
+    check(`${name} fehlt in der Umgebung`, !(name in umgebung));
+  }
+  check(
+    'Kein Wert des Tokens taucht sonstwo auf',
+    !Object.values(umgebung).some((wert) => String(wert).startsWith('test-geheim-')),
+  );
+  const pfadSchluessel = Object.keys(process.env).find((k) => k.toLowerCase() === 'path');
+  check('Normale Variablen bleiben erhalten (PATH)', Boolean(pfadSchluessel && umgebung[pfadSchluessel]));
+  for (const [name, wert] of Object.entries(vorher)) {
+    if (wert === undefined) delete process.env[name];
+    else process.env[name] = wert;
+  }
+
   raeumeAuf(
+    extrahiereWorktreePfad(rohAufrufeOffen),
     extrahiereWorktreePfad(rohAufrufe),
     extrahiereWorktreePfad(rohAufrufeTabu),
     promptPfad,

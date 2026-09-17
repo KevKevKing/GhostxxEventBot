@@ -267,7 +267,25 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
       return { ...ergebnis, zusammenfassung, fehler: `Leitplanke verletzt: ${treffer}` };
     }
     if (!dateien.length) {
-      return { ...ergebnis, zusammenfassung, fehler: 'Session hat keine Aenderung committet.' };
+      // "Nichts committet" hat zwei sehr verschiedene Ursachen, und der
+      // Unterschied ist fuer Kevin wichtig: entweder die Session hat
+      // tatsaechlich nichts gemacht, oder sie hat Dateien geaendert und
+      // konnte nur nicht committen (z.B. fehlende Ausfuehrungsrechte fuer
+      // npm test / git commit). Im zweiten Fall loescht das `git worktree
+      // remove --force` gleich danach die Arbeit unwiderruflich - dann soll
+      // in der DM wenigstens stehen, dass etwas da war.
+      const offen = await ausfuehren('git', ['status', '--porcelain'], { cwd: worktreePfad });
+      const hatUncommittetes = offen.code === 0
+        && offen.stdout.split(/\r?\n/).some((z) => z.trim());
+
+      return {
+        ...ergebnis,
+        zusammenfassung,
+        fehler: hatUncommittetes
+          ? 'Session hat Dateien geaendert, aber nicht committet - vermutlich fehlende '
+            + 'Ausfuehrungsrechte fuer npm test/git commit. Aenderungen wurden verworfen.'
+          : 'Session hat keine Aenderung committet.',
+      };
     }
 
     const push = await ausfuehren('git', ['push', 'origin', branch], { cwd: worktreePfad });
@@ -284,5 +302,9 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
 
 module.exports = {
   TABU_MUSTER,
+  // Nur fuer den Regressionstest exportiert: dass hier wirklich kein Token
+  // durchrutscht, war der schwerwiegendste Fehler, der in diesem Feature
+  // bisher gefunden wurde. Das darf nicht ungeprueft bleiben.
+  bereinigteUmgebung,
   starteSession,
 };
