@@ -119,23 +119,26 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
   check('Grund nennt die Remote-URL', ergebnisOhneRemote.fehler.includes('Remote-URL'));
   check('Kein clone ohne Remote-URL', !aufrufeOhneRemote.some((a) => a.startsWith('git clone')));
 
-  section('npm install schlaegt fehl -> Abbruch VOR der Claude-Code-Session');
+  section('npm ci schlaegt fehl -> Abbruch VOR der Claude-Code-Session');
   // Gemessen (echter End-zu-Ende-Testlauf, 17.09.): ein frischer Klon hat nie
-  // node_modules, `npm install` laeuft deshalb jetzt VOR dem Start der
-  // Claude-Code-Session. Schlaegt es fehl, kann `npm test` ohnehin nicht
-  // laufen - das ist ein echter Abbruchgrund. Entscheidend hier: die
-  // claude-CLI darf in diesem Fall gar nicht erst aufgerufen werden, und es
-  // darf nichts gepusht werden.
+  // node_modules, `npm ci` laeuft deshalb jetzt VOR dem Start der
+  // Claude-Code-Session (statt `npm install` - siehe Kommentar im Modul: nur
+  // `npm ci` schreibt package-lock.json garantiert nie). Schlaegt es fehl,
+  // kann `npm test` ohnehin nicht laufen - das ist ein echter Abbruchgrund.
+  // Entscheidend hier: die claude-CLI darf in diesem Fall gar nicht erst
+  // aufgerufen werden, und es darf nichts gepusht werden.
   let claudeWurdeAufgerufen = false;
   let gepusht = false;
+  let npmCiTimeoutMs = null;
   const ergebnisNpmFehler = await session.starteSession(
-    { titel: 'npm install kaputt', belege: [] },
+    { titel: 'npm ci kaputt', belege: [] },
     {
-      ausfuehren: async (cmd, args) => {
+      ausfuehren: async (cmd, args, options = {}) => {
         if (istRemoteAbfrage(cmd, args)) {
           return { code: 0, stdout: `${REMOTE_URL}\n`, stderr: '' };
         }
-        if (cmd === 'npm' && args[0] === 'install') {
+        if (cmd === 'npm' && args[0] === 'ci') {
+          npmCiTimeoutMs = options.timeoutMs;
           return { code: 1, stdout: '', stderr: 'npm ERR! kaputtes Netzwerk' };
         }
         if (cmd === 'claude') {
@@ -153,12 +156,48 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
   );
   check('Als nicht ok gemeldet', ergebnisNpmFehler.ok === false);
   check(
-    'Grund nennt npm install',
-    ergebnisNpmFehler.fehler.includes('npm install'),
+    'Grund nennt npm ci',
+    ergebnisNpmFehler.fehler.includes('npm ci'),
     ergebnisNpmFehler.fehler,
   );
   check('claude-CLI wurde NICHT aufgerufen', claudeWurdeAufgerufen === false);
-  check('Kein Push nach fehlgeschlagenem npm install', gepusht === false);
+  check('Kein Push nach fehlgeschlagenem npm ci', gepusht === false);
+  check(
+    'npm ci bekommt den eigenen, kuerzeren Timeout statt der 20-Minuten-Session-Zeit',
+    npmCiTimeoutMs === session.NPM_CI_TIMEOUT_MS && npmCiTimeoutMs < 20 * 60 * 1000,
+    String(npmCiTimeoutMs),
+  );
+
+  section('npm ci laeuft in Zeitueberschreitung -> Meldung eindeutig von der Session-Timeout-Meldung unterscheidbar');
+  // Ohne eigenen Text waeren "Zeitueberschreitung nach 5 Minuten" (npm ci) und
+  // eine "Zeitueberschreitung nach 20 Minuten" (Claude-Code-Session) nur an
+  // der Zahl zu unterscheiden - fuer eine DM an Kevin zu wenig eindeutig.
+  const ergebnisNpmTimeout = await session.starteSession(
+    { titel: 'npm ci haengt', belege: [] },
+    {
+      ausfuehren: async (cmd, args) => {
+        if (istRemoteAbfrage(cmd, args)) {
+          return { code: 0, stdout: `${REMOTE_URL}\n`, stderr: '' };
+        }
+        if (cmd === 'npm' && args[0] === 'ci') {
+          return {
+            code: -1,
+            stdout: '',
+            stderr: 'Zeitueberschreitung nach 5 Minuten',
+            timedOut: true,
+          };
+        }
+        return { code: 0, stdout: '', stderr: '' };
+      },
+      leseZusammenfassung: async () => '',
+    },
+  );
+  check('Als nicht ok gemeldet', ergebnisNpmTimeout.ok === false);
+  check(
+    'Meldung nennt npm ci, nicht nur "Zeitueberschreitung"',
+    ergebnisNpmTimeout.fehler.startsWith('npm ci im Klon:'),
+    ergebnisNpmTimeout.fehler,
+  );
 
   section('data/ und logs/ stehen auf der Tabu-Liste');
   // Bleibt bestehen, obwohl pruefeWurzel data/ nicht mehr ueberwacht: sollte
@@ -290,18 +329,24 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
     JSON.stringify(claudeAufrufArgs),
   );
 
-  section('Windows-Spawn-Fix: nur der claude-Aufruf bekommt shell:true');
+  section('Windows-Spawn-Fix: claude und npm bekommen shell:true, git nicht');
   // Gemessen: spawn('claude', ...) schlaegt unter Windows ohne shell:true mit
   // ENOENT fehl, weil claude dort als claude.cmd/claude.ps1-Skript installiert
-  // ist. git-Aufrufe sprechen git.exe direkt an und sollen NICHT betroffen
-  // sein. process.platform ist konfigurierbar - hier gezielt fuer den Test
-  // auf 'win32' gesetzt und danach wiederhergestellt.
+  // ist - npm ist aus demselben Grund betroffen (npm.cmd) und bekommt seit
+  // dem npm-ci-Schritt in starteSession() dieselbe Behandlung. git-Aufrufe
+  // sprechen git.exe direkt an und sollen NICHT betroffen sein.
+  // process.platform ist konfigurierbar - hier gezielt fuer den Test auf
+  // 'win32' gesetzt und danach wiederhergestellt.
   const echtePlattform = Object.getOwnPropertyDescriptor(process, 'platform');
   Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
   try {
     const claudeAngepasst = session.passeBefehlFuerPlattformAn('claude', { cwd: '/irgendwo' });
     check('claude wird zu claude.cmd unter win32', claudeAngepasst.cmd === 'claude.cmd', claudeAngepasst.cmd);
     check('shell:true fuer claude unter win32', claudeAngepasst.options.shell === true);
+
+    const npmAngepasst = session.passeBefehlFuerPlattformAn('npm', { cwd: '/irgendwo' });
+    check('npm wird zu npm.cmd unter win32', npmAngepasst.cmd === 'npm.cmd', npmAngepasst.cmd);
+    check('shell:true fuer npm unter win32', npmAngepasst.options.shell === true);
 
     const gitAngepasst = session.passeBefehlFuerPlattformAn('git', { cwd: '/irgendwo' });
     check('git bleibt git unter win32', gitAngepasst.cmd === 'git', gitAngepasst.cmd);

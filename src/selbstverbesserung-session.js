@@ -158,6 +158,16 @@ const PFAD_UMGEBUNGSVARIABLEN = ['INIT_CWD', 'PWD', 'OLDPWD'];
 const PFAD_PRAEFIXE = ['npm_'];
 
 const TIMEOUT_MS = 20 * 60 * 1000;
+// Eigener, kuerzerer Timeout fuer `npm ci` statt TIMEOUT_MS (20 Minuten fuer
+// die GESAMTE Session): ein haengender `npm ci`-Aufruf darf nicht die
+// kompletten 20 Minuten aufbrauchen, bevor die eigentliche Claude-Code-
+// Session ueberhaupt startet. 5 Minuten sind fuer dieses Projekt
+// (ueberschaubare Anzahl Abhaengigkeiten, kein natives Kompilieren)
+// grosszuegig bemessen und lassen der eigentlichen Session danach immer noch
+// den Grossteil der 20 Minuten. Auf Modulebene neben TIMEOUT_MS, damit der
+// 5-vs-20-Minuten-Vergleich beim Lesen sofort sichtbar ist und Tests die
+// Konstante direkt pruefen koennen.
+const NPM_CI_TIMEOUT_MS = 5 * 60 * 1000;
 const wurzel = path.resolve(__dirname, '..');
 
 // Bewusst EIN einzelnes Wort ohne Leerzeichen (Bindestriche statt
@@ -338,8 +348,10 @@ Aenderung. Halte dich an CLAUDE.md in diesem Projekt (Sprache, Konventionen,
   \`npm start\`.
 - Ein Problem, ein fokussierter Commit. Fuehre \`npm test\` aus und
   committe nur, wenn alle Tests bestehen. Die Abhaengigkeiten
-  (\`node_modules\`) sind bereits installiert - \`npm install\` musst du
-  selbst nicht mehr ausfuehren.
+  (\`node_modules\`) sind bereits installiert - \`npm install\`/\`npm ci\`
+  darfst du selbst nicht mehr ausfuehren.
+- **Committe gezielt nur die Dateien, die du selbst geaendert hast** - kein
+  \`git add -A\`, kein \`git commit -am\`.
 - Push NICHT selbst - das macht die aufrufende Automatisierung.
 
 ## Am Ende
@@ -437,57 +449,49 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
     // Gemessen bei einem echten End-zu-Ende-Testlauf (Kevin, 17.09.): ein
     // frischer `git clone` hat nie node_modules - .gitignore schliesst es aus,
     // wie bei jedem Checkout. Ohne diesen Schritt musste die Claude-Code-
-    // Session selbst erst `npm install` nachholen, bevor `npm test`
-    // ueberhaupt laufen konnte. Dabei hat npm BEILAEUFIG ein veraltetes
-    // Lizenzfeld in package-lock.json korrigiert (ISC -> MIT, passend zu
-    // package.json) - eine inhaltlich richtige, aber laut TABU_MUSTER
-    // verbotene Aenderung an package-lock.json. Die Tabu-Pruefung hat das
-    // danach korrekt blockiert (das ist ihr Job), aber damit auch die
-    // GESAMTE sonst folgenlos richtige Session verworfen. Das waere JEDER
-    // echten Session so ergangen, nicht nur dieser einen: jeder frische Klon
-    // erzwingt ein `npm install`, das so gut wie immer package-lock.json
-    // beruehrt.
+    // Session selbst erst Abhaengigkeiten installieren, bevor `npm test`
+    // ueberhaupt laufen konnte. Mit `npm install` hat das beilaeufig ein
+    // veraltetes Lizenzfeld in package-lock.json korrigiert (ISC -> MIT,
+    // passend zu package.json) - eine inhaltlich richtige, aber laut
+    // TABU_MUSTER verbotene Aenderung an package-lock.json. Die Tabu-Pruefung
+    // hat das danach korrekt blockiert (das ist ihr Job), aber damit auch die
+    // GESAMTE sonst folgenlos richtige Session verworfen.
+    //
+    // Deshalb hier bewusst `npm ci` statt `npm install`: `npm ci` schreibt
+    // package-lock.json grundsaetzlich NIE (es installiert exakt, was dort
+    // steht, statt Versionen neu aufzuloesen und die Datei zu normalisieren).
+    // Das Restrisiko entfaellt damit vollstaendig, nicht nur teilweise - und
+    // das ist keine Vermutung, sondern bereits im Repo gemessen:
+    // .github/workflows/test.yml faehrt bei jedem PR/Push genau `npm ci`
+    // gegen genau diese Lockfile, gefolgt von `npm test`, nachweislich gruen.
     //
     // Der Schritt steht deshalb HIER: nach dem Anlegen des Branches, aber vor
     // dem Schreiben der Aufgaben-Datei und vor dem Start der Claude-Code-
     // Session - also bevor die Session ueberhaupt zu arbeiten beginnt. Die
-    // Session muss `npm install` damit selbst nicht mehr ausfuehren.
-    //
-    // Ehrlich dazu, weil dieses Modul Restrisiken sonst auch ausspricht statt
-    // sie zu verschweigen: geloest ist damit nur der wahrscheinliche Fall
-    // (die Session sieht schon fertige node_modules und ruft `npm install`
-    // gar nicht erst auf). Wuerde die Session dennoch selbst `git add -A`
-    // oder `git commit -am` statt gezielter Dateien verwenden, koennte sie
-    // die durch DIESEN Schritt bereits im Arbeitsverzeichnis liegende
-    // Aenderung an package-lock.json trotzdem in ihren eigenen Commit
-    // mitziehen - `pruefeTabu` sieht dann wieder denselben Treffer. Eine
-    // Garantie dagegen gibt es ohne echtes Sandboxing nicht; der Prompt in
-    // CLAUDE.md ("ein Problem, ein fokussierter Commit") macht den Fall aber
-    // unwahrscheinlich, und er ist nicht schlimmer als vorher.
-    //
-    // Eigener, kuerzerer Timeout statt TIMEOUT_MS (20 Minuten fuer die
-    // GESAMTE Session): ein haengendes `npm install` darf nicht die
-    // kompletten 20 Minuten aufbrauchen, bevor die eigentliche Claude-Code-
-    // Session ueberhaupt startet. 5 Minuten sind fuer dieses Projekt (wenige
-    // Abhaengigkeiten, kein natives Kompilieren) grosszuegig bemessen und
-    // lassen der eigentlichen Session danach immer noch den Grossteil der
-    // 20 Minuten.
-    const NPM_INSTALL_TIMEOUT_MS = 5 * 60 * 1000;
+    // Session darf Abhaengigkeiten damit selbst nicht mehr installieren
+    // (siehe baueAufgabe).
     const installiert = await ausfuehren(
       'npm',
-      ['install'],
-      { cwd: klonPfad, timeoutMs: NPM_INSTALL_TIMEOUT_MS },
+      ['ci'],
+      { cwd: klonPfad, timeoutMs: NPM_CI_TIMEOUT_MS },
     );
     if (installiert.code !== 0) {
       // Ohne Abhaengigkeiten kann die Session nichts sinnvoll testen - das
       // ist ein echter Fehlerfall, kein Grund, die Claude-Code-Session
       // trotzdem erst noch zu starten. Aufraeumen passiert wie bei jedem
       // anderen fruehen Abbruch im `finally` unten.
+      //
+      // Eigener Text bei Zeitueberschreitung (nicht wie beim claude-Aufruf
+      // einfach installiert.stderr durchreichen): `echtAusfuehren` liefert
+      // dort nur "Zeitueberschreitung nach 5 Minuten" - identisch im Satzbau
+      // zur 20-Minuten-Meldung der eigentlichen Session, nur an der Zahl zu
+      // unterscheiden. "npm ci im Klon: ..." davor macht sofort klar, WELCHER
+      // Schritt haengengeblieben ist.
       return {
         ...ergebnis,
         fehler: installiert.timedOut
-          ? installiert.stderr
-          : `npm install im Klon fehlgeschlagen: ${installiert.stderr || installiert.code}`,
+          ? `npm ci im Klon: ${installiert.stderr}`
+          : `npm ci im Klon fehlgeschlagen: ${installiert.stderr || installiert.code}`,
       };
     }
 
@@ -582,9 +586,14 @@ module.exports = {
   // bisher gefunden wurde. Das darf nicht ungeprueft bleiben.
   bereinigteUmgebung,
   // Nur fuer den Regressionstest exportiert: dass unter Windows wirklich nur
-  // der claude-Aufruf shell:true bekommt und git-Aufrufe unangetastet
-  // bleiben, war der Kern des ENOENT-Fixes.
+  // claude und npm shell:true bekommen (beide unter Windows .cmd-Skripte,
+  // kein direkt startbares Programm) und git-Aufrufe unangetastet bleiben,
+  // war der Kern des ENOENT-Fixes.
   passeBefehlFuerPlattformAn,
+  // Nur fuer den Regressionstest exportiert: der 5-vs-20-Minuten-Vergleich
+  // (npm ci darf die Session-Timeout-Budget nicht auffressen) soll pruefbar
+  // bleiben, nicht nur im Kommentar behauptet werden.
+  NPM_CI_TIMEOUT_MS,
   // Nur fuer den Integrationstest exportiert: der reicht bis in den echten
   // spawn() hinein (mit einem .cmd-Shim statt der echten claude-CLI), weil
   // genau dort - und nicht in der reinen Argument-Zuordnungsfunktion - der
