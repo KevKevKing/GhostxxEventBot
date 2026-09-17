@@ -25,15 +25,36 @@ const { getBerlinDateStamp } = require('./time');
 //      laufende Bot auf der Platte liegt - genau das, was der Prompt ihr
 //      verbietet. Ein `git clone <remote-url>` erzeugt dagegen ein
 //      eigenstaendiges Repository, dessen .git nur die GitHub-URL kennt.
-//      Der echte Pfad ist damit nicht mehr trivial auffindbar.
 //      Wichtig: geklont wird vom REMOTE, nie vom lokalen Pfad - ein
 //      `git clone <lokaler pfad>` wuerde denselben Pfad in
 //      .git/config als origin hinterlegen und nichts gewinnen.
+//      Dazu gehoert der Pfad-Filter in bereinigteUmgebung(): npm setzt
+//      beim Start des Bots INIT_CWD und ein Dutzend npm_*-Variablen auf den
+//      echten Checkout-Pfad, die werden mit entfernt.
+//
+//      ABER - und das ist wichtiger als der Fix selbst: der echte Pfad ist
+//      damit NICHT unauffindbar geworden. Die Claude-CLI legt in
+//      ~/.claude/projects/ pro Projekt einen Ordner an, dessen NAME den Pfad
+//      kodiert (`C--Users-kevin-Desktop-GhostxxEventBot`). Ein
+//      `ls ~/.claude/projects` verraet ihn also weiterhin, und das laesst
+//      sich nicht schliessen, ohne der CLI ihr eigenes Zuhause wegzunehmen.
+//      Was der Klon wirklich leistet: er schliesst den BEILAEUFIGEN Weg -
+//      die .git-Datei lag im Arbeitsverzeichnis, ein `cat .git` beim
+//      Umsehen haette gereicht, voellig ohne Absicht. Wer den Pfad gezielt
+//      sucht, findet ihn nach wie vor. Das ist ein bestehendes Restrisiko,
+//      keine geschlossene Luecke.
 //   4. Die Vorher/Nachher-Pruefung des ECHTEN Checkouts (pruefeWurzel):
 //      `git status --porcelain -- src/` im Wurzelverzeichnis vor und nach
-//      der Session. Eine Aenderung dort wirkt nach dem naechsten Neustart -
-//      und sie ist rauschfrei erkennbar, weil der laufende Bot selbst nie
-//      in src/ schreibt.
+//      der Session. Eine Aenderung dort wirkt nach dem naechsten Neustart.
+//      Rauschfrei ist das bezogen auf den BOT - der schreibt nie selbst in
+//      src/. Ein Fehlalarm ist trotzdem moeglich: wenn Kevin waehrend der
+//      bis zu 20 Minuten selbst an src/ arbeitet (von Hand oder in einer
+//      zweiten Claude-Code-Session), sieht die Pruefung genau dasselbe wie
+//      bei einem echten Einbruch und schlaegt an. Das ist gewollt
+//      fail-closed - lieber einmal umsonst nachsehen als einen echten Fall
+//      verpassen. Es soll nur niemanden ueberraschen: der erste Alarm
+//      dieser Art ist vermutlich Kevin selbst, und er darf dem Alarm
+//      danach trotzdem noch glauben.
 //
 // Warum data/ NICHT ueberwacht wird, obwohl dort die Auszahlungsdaten
 // liegen - das ist die unangenehme Stelle und sie soll hier stehen:
@@ -46,11 +67,13 @@ const { getBerlinDateStamp } = require('./time');
 //     Steuerungszustand). Die Pruefung wuerde fast bei jedem Lauf anschlagen,
 //     ohne dass etwas passiert ist. Eine Warnung, die immer kommt, wird
 //     abgeschaltet - das waere schlechter als gar keine.
-// Die Verteidigung fuer data/ ist deshalb: Punkt 3 (der echte Pfad ist nicht
-// mehr trivial auffindbar) plus die ausdrueckliche Prompt-Anweisung, data/
-// nirgendwo anzufassen. Das ist ein Restrisiko, gemindert durch fehlende
-// Pfadkenntnis und Vertrauen in die Anweisung - NICHT durch technische
-// Erkennung wie bei src/. Wer das anders haben will, braucht echtes
+// Die Verteidigung fuer data/ ist deshalb: Punkt 3 (der Pfad liegt der
+// Session nicht mehr beilaeufig vor der Nase - gezielt findbar bleibt er,
+// siehe dort) plus die ausdrueckliche Prompt-Anweisung, data/ nirgendwo
+// anzufassen. Fuer data/ gibt es also KEINE technische Erkennung wie bei
+// src/, sondern nur Vertrauen in die Anweisung und einen etwas hoeheren
+// Aufwand fuer den Pfad. Das ist ein echtes, offenes Restrisiko und soll
+// hier auch so heissen. Wer das anders haben will, braucht echtes
 // Sandboxing, nicht eine weitere Pruefschleife.
 //
 // Was hier NICHT schuetzt, und das soll ebenfalls so dastehen: ein Prozess
@@ -82,6 +105,18 @@ const WURZEL_PFADE = ['src/'];
 // (siehe getToken() in config.js). Werden vor jedem Kindprozess entfernt.
 const TOKEN_UMGEBUNGSVARIABLEN = ['DISCORD_TOKEN', 'BOT_TOKEN', 'TOKEN'];
 
+// Variablen, die den PFAD des echten Checkouts verraten. Der Bot wird ueber
+// `npm start` gestartet (scripts/run-bot.ps1), und npm legt dabei eine ganze
+// Reihe eigener Variablen an, die den Startpfad woertlich enthalten:
+// INIT_CWD, npm_config_local_prefix, npm_package_json und weitere. Ohne
+// diesen Filter haette ein `echo $INIT_CWD` in der Session gereicht - der
+// ganze Aufwand mit dem Klon statt dem Worktree waere umsonst gewesen.
+// PWD/OLDPWD aus demselben Grund: sie tragen das Arbeitsverzeichnis des
+// Elternprozesses. Das Kind setzt sich beide ohnehin selbst neu, passend zu
+// seinem eigenen cwd.
+const PFAD_UMGEBUNGSVARIABLEN = ['INIT_CWD', 'PWD', 'OLDPWD'];
+const PFAD_PRAEFIXE = ['npm_'];
+
 const TIMEOUT_MS = 20 * 60 * 1000;
 const wurzel = path.resolve(__dirname, '..');
 
@@ -95,8 +130,16 @@ function slug(titel) {
 
 function bereinigteUmgebung() {
   const env = { ...process.env };
-  for (const name of TOKEN_UMGEBUNGSVARIABLEN) {
+  for (const name of [...TOKEN_UMGEBUNGSVARIABLEN, ...PFAD_UMGEBUNGSVARIABLEN]) {
     delete env[name];
+  }
+  // Windows vergleicht Variablennamen ohne Ruecksicht auf Gross-/
+  // Kleinschreibung, deshalb hier auch - npm schreibt sie klein, aber
+  // darauf soll sich das hier nicht verlassen.
+  for (const name of Object.keys(env)) {
+    if (PFAD_PRAEFIXE.some((praefix) => name.toLowerCase().startsWith(praefix))) {
+      delete env[name];
+    }
   }
   return env;
 }

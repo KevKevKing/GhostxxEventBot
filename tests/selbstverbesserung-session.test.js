@@ -243,5 +243,39 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
     else process.env[name] = wert;
   }
 
+  section('Der Pfad des echten Checkouts bleibt dem Kindprozess verborgen');
+  // Der Bot wird ueber `npm start` gestartet, und npm setzt dabei INIT_CWD
+  // sowie ein Dutzend npm_*-Variablen auf den echten Checkout-Pfad. Ohne
+  // diesen Filter haette ein `echo $INIT_CWD` in der Session gereicht - dann
+  // waere der ganze Wechsel von worktree auf clone umsonst gewesen.
+  const PFAD_NAMEN = ['INIT_CWD', 'PWD', 'OLDPWD', 'npm_config_local_prefix', 'npm_package_json'];
+  // Bewusst ein erfundener Marker statt des echten Pfads: der echte Pfad
+  // steckt waehrend `npm test` in weiteren Variablen dieses Prozesses, dann
+  // wuerde die Suche unten anschlagen, ohne dass etwas kaputt ist.
+  const PFAD_MARKER = 'C:\\test-marker-echter-checkout';
+  const vorherPfad = {};
+  for (const name of PFAD_NAMEN) {
+    vorherPfad[name] = process.env[name];
+    process.env[name] = PFAD_MARKER;
+  }
+  const umgebungPfad = session.bereinigteUmgebung();
+  for (const name of PFAD_NAMEN) {
+    check(`${name} fehlt in der Umgebung`, !(name in umgebungPfad));
+  }
+  check(
+    'Keine npm_-Variable bleibt uebrig',
+    !Object.keys(umgebungPfad).some((name) => name.toLowerCase().startsWith('npm_')),
+  );
+  check(
+    'Der Pfad taucht in keiner verbliebenen Variable auf',
+    !Object.values(umgebungPfad).some((wert) => String(wert).includes(PFAD_MARKER)),
+  );
+  const pfadSchluessel2 = Object.keys(process.env).find((k) => k.toLowerCase() === 'path');
+  check('PATH bleibt trotzdem erhalten', Boolean(pfadSchluessel2 && umgebungPfad[pfadSchluessel2]));
+  for (const [name, wert] of Object.entries(vorherPfad)) {
+    if (wert === undefined) delete process.env[name];
+    else process.env[name] = wert;
+  }
+
   finish();
 })();
