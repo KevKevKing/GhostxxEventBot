@@ -24,6 +24,12 @@ const STANDARD = {
   logKanaele: true,
   botLog: true,
   fehlerLog: true,
+  // Einziger Schalter, der bewusst AUS startet: die Selbstverbesserung
+  // startet echte Claude-Code-Sessions auf Kevins Rechner. Der Plan verlangt
+  // drei manuelle Schritte, bevor das zum ersten Mal von allein laufen darf
+  // (CLI pruefen, einmal von Hand testen, dann scharf schalten). Ohne diesen
+  // Schalter waere der erste automatische Lauf der erste Test ueberhaupt.
+  selbstverbesserung: false,
 };
 
 let cache = { ...STANDARD };

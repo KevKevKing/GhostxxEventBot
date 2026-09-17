@@ -825,6 +825,7 @@ const SCHALTER_GRUPPEN = [
   ['Event & Chat', [['eventScheduler', 'Event-Scheduler'], ['terminErinnerungen', 'Termin-Erinnerungen'], ['chat', 'Ghostxx-Chat'], ['commands', 'Alle Commands']]],
   ['Bilder', [['visaBilder', 'Reisepässe prüfen'], ['chatBilder', 'Bilder im Chat lesen']]],
   ['Logbuch', [['logbuchSortieren', 'Tickets sortieren']]],
+  ['Selbstverbesserung', [['selbstverbesserung', 'Selbst verbessern']]],
   ['Discord-Logs', [['auditLog', 'Audit-Log'], ['logNachrichten', 'Nachrichten'], ['logMitglieder', 'Mitglieder & Rollen'], ['logSprache', 'Sprachkanäle'], ['logSelbststumm', 'Mikro & Kopfhörer'], ['logKanaele', 'Kanäle'], ['botLog', 'Bot-Meldungen'], ['fehlerLog', 'Fehler-Meldungen']]],
 ];
 

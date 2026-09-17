@@ -1,4 +1,5 @@
 const { logError } = require('./logger');
+const { istAn } = require('./steuerung');
 const beobachtungEcht = require('./selbstbeobachtung');
 const limitEcht = require('./selbstverbesserung-limit');
 const sessionEcht = require('./selbstverbesserung-session');
@@ -20,7 +21,14 @@ async function tick({
   session = sessionEcht,
   benachrichtigung = benachrichtigungEcht,
   gedaechtnis = gedaechtnisEcht,
+  schalterAn = istAn,
 } = {}) {
+  // Der Schalter steht standardmaessig auf AUS (siehe steuerung.js). Solange
+  // er aus ist, passiert hier gar nichts - auch keine nachgereichten DMs.
+  // Kevin schaltet ihn im Dashboard ein, wenn er die drei Handpruefungen
+  // aus dem Plan gemacht hat.
+  if (!schalterAn('selbstverbesserung')) return;
+
   await benachrichtigung.sendeAusstehende();
 
   const problem = (await beobachten.crashSchleifeErkannt()) || (await beobachten.erkenneProblem());
@@ -60,6 +68,9 @@ function startSelbstverbesserung(client) {
 
   let laeuft = false;
   async function lauf() {
+    // Zweite, unabhaengige Pruefung: tick() prueft den Schalter selbst, aber
+    // so wird bei ausgeschaltetem Schalter nicht einmal die Kette betreten.
+    if (!istAn('selbstverbesserung')) return;
     if (laeuft) return;
     laeuft = true;
     try {
@@ -72,9 +83,15 @@ function startSelbstverbesserung(client) {
     }
   }
 
+  // Beobachter und DM-Client werden immer angemeldet (das kostet nichts und
+  // schreibt nur Fehlerhistorie mit) - gestartet wird aber nur, wenn der
+  // Schalter an ist. Das Intervall laeuft trotzdem mit, damit ein spaeteres
+  // Einschalten im Dashboard ohne Bot-Neustart greift.
   lauf();
   const interval = setInterval(lauf, TICK_MS);
-  console.log('Selbstverbesserung laeuft.');
+  console.log(istAn('selbstverbesserung')
+    ? 'Selbstverbesserung laeuft.'
+    : 'Selbstverbesserung ist ausgeschaltet (Schalter "selbstverbesserung" im Dashboard).');
   return interval;
 }
 

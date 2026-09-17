@@ -123,7 +123,9 @@ async function main() {
       // Verstehen -> lernen -> anwenden (Vorschlag): beobachtet eigene
       // Fehler/Abstuerze, schlaegt hoechstens 5x taeglich automatisch einen
       // Fix vor, wendet nie selbst etwas an - siehe docs/superpowers/specs/
-      // 2026-09-17-ghostxx-selbstverbesserung-design.md.
+      // 2026-09-17-ghostxx-selbstverbesserung-design.md. Steht ueber den
+      // Dashboard-Schalter "selbstverbesserung" standardmaessig auf AUS -
+      // erst nach Kevins Handpruefung laeuft hier ueberhaupt etwas.
       startSelbstverbesserung(readyClient);
 
       // Ollama darf nicht blockieren: laeuft es nicht, funktionieren Events,

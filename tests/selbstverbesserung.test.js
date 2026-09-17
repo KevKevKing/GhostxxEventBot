@@ -1,10 +1,30 @@
 const { check, finish, section } = require('./lib');
 const { tick } = require('../src/selbstverbesserung');
 
-section('Kein Problem -> nichts passiert');
+section('Schalter aus -> komplett untaetig');
 (async () => {
+  const aufrufeAus = [];
+  await tick({
+    schalterAn: () => false,
+    beobachten: {
+      erkenneProblem: async () => { aufrufeAus.push('erkenneProblem'); return { titel: 'X', belege: [] }; },
+      crashSchleifeErkannt: async () => { aufrufeAus.push('crashSchleifeErkannt'); return null; },
+    },
+    limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => aufrufeAus.push('vermerkeLauf') },
+    session: { starteSession: async () => { aufrufeAus.push('starteSession'); return { ok: true }; } },
+    benachrichtigung: {
+      benachrichtige: async () => aufrufeAus.push('benachrichtige'),
+      sendeAusstehende: async () => { aufrufeAus.push('sendeAusstehende'); return 0; },
+    },
+    gedaechtnis: { neuerEintrag: async () => { aufrufeAus.push('neuerEintrag'); return { id: '1' }; } },
+  });
+  check('Bei ausgeschaltetem Schalter passiert gar nichts', aufrufeAus.length === 0);
+  check('Auch keine nachgereichten DMs', !aufrufeAus.includes('sendeAusstehende'));
+
+  section('Kein Problem -> nichts passiert');
   const aufrufe = [];
   await tick({
+    schalterAn: () => true,
     beobachten: { erkenneProblem: async () => null, crashSchleifeErkannt: async () => null },
     limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => aufrufe.push('vermerkeLauf') },
     session: { starteSession: async () => { aufrufe.push('starteSession'); return { ok: true, branch: 'x', zusammenfassung: 'y' }; } },
@@ -16,6 +36,7 @@ section('Kein Problem -> nichts passiert');
   section('Problem gefunden und Limit erlaubt -> volle Kette');
   const aufrufe2 = [];
   await tick({
+    schalterAn: () => true,
     beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null },
     limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => aufrufe2.push('vermerkeLauf') },
     session: { starteSession: async (problem) => { aufrufe2.push(`starteSession:${problem.titel}`); return { ok: true, branch: 'b', zusammenfassung: 'z' }; } },
@@ -31,6 +52,7 @@ section('Kein Problem -> nichts passiert');
   section('Tageslimit erreicht -> keine Session');
   const aufrufe3 = [];
   await tick({
+    schalterAn: () => true,
     beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null },
     limit: { darfLaufen: async () => ({ erlaubt: false, grund: 'tageslimit' }), vermerkeLauf: async () => aufrufe3.push('vermerkeLauf') },
     session: { starteSession: async () => { aufrufe3.push('starteSession'); return { ok: true }; } },
@@ -44,7 +66,8 @@ section('Kein Problem -> nichts passiert');
   let tickHatGeworfen = false;
   try {
     await tick({
-      beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null },
+      schalterAn: () => true,
+    beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null },
       limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => aufrufe4.push('vermerkeLauf') },
       session: { starteSession: async () => { throw new Error('kaputt'); } },
       benachrichtigung: { benachrichtige: async () => aufrufe4.push('benachrichtige'), sendeAusstehende: async () => 0 },
