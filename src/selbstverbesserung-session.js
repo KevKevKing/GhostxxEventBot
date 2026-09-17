@@ -43,6 +43,15 @@ const { getBerlinDateStamp } = require('./time');
 //      Umsehen haette gereicht, voellig ohne Absicht. Wer den Pfad gezielt
 //      sucht, findet ihn nach wie vor. Das ist ein bestehendes Restrisiko,
 //      keine geschlossene Luecke.
+//      Seit dem Wechsel auf bypassPermissions (Begruendung weiter unten) ist
+//      dieses Restrisiko groesser als hier urspruenglich beschrieben: unter
+//      acceptEdits haette die Session so einen Befehl (`ls
+//      ~/.claude/projects`, `cat .git`, `cd ..`) gar nicht unbeaufsichtigt
+//      ausfuehren koennen - jeder Bash-Befehl haette nachgefragt und waere
+//      ohne Antwort abgebrochen. Unter bypassPermissions kann sie es ohne
+//      jede Rueckfrage, sofort, waehrend des Laufs. "Wer gezielt sucht,
+//      findet ihn" ist damit nicht mehr nur ein theoretisches Restrisiko,
+//      sondern technisch voraussetzungslos moeglich.
 //   4. Die Vorher/Nachher-Pruefung des ECHTEN Checkouts (pruefeWurzel):
 //      `git status --porcelain -- src/` im Wurzelverzeichnis vor und nach
 //      der Session. Eine Aenderung dort wirkt nach dem naechsten Neustart.
@@ -116,12 +125,21 @@ const TABU_MUSTER = [
   'scripts/', 'package.json', 'package-lock.json', 'CLAUDE.md', '.claude/',
 ];
 
-// Was im echten Checkout ueber `git status` ueberwacht wird: nur src/, der
-// Code des laufenden Bots. data/ steht hier bewusst NICHT mehr - warum, siehe
-// den Modulkommentar oben (gitignored, und der laufende Bot schreibt dort
+// Was im echten Checkout ueber `git status` ueberwacht wird: src/ (der Code
+// des laufenden Bots), scripts/ (Start-/Stop-/Restart-Skripte - eine
+// Aenderung dort wirkt erst beim naechsten Neustart, aber genau deshalb
+// waere sie leicht zu uebersehen) und .claude/ (eigene Konventionen,
+// Werkzeugkonfiguration). Alle drei sind versioniert (git status sieht
+// Aenderungen) und werden vom laufenden Bot nie beschrieben - das
+// Rauschargument, das data/ von dieser Liste ausschliesst, greift hier
+// nicht. Seit bypassPermissions (siehe Modulkommentar oben) ist eine
+// unbeaufsichtigte Aenderung an z.B. scripts/run-bot.ps1 technisch leichter
+// erreichbar als vorher, deshalb gehoert scripts/ jetzt mit in die
+// Ueberwachung. data/ steht hier weiterhin bewusst NICHT - warum, siehe den
+// Modulkommentar oben (gitignored, und der laufende Bot schreibt dort
 // selbst staendig legitim). TABU_MUSTER behaelt 'data/' trotzdem: sollte
 // jemand data/ aus .gitignore nehmen, greift der Diff-Check im eigenen Klon.
-const WURZEL_PFADE = ['src/'];
+const WURZEL_PFADE = ['src/', 'scripts/', '.claude/'];
 
 // Namen, unter denen der echte Discord-Token in process.env stehen kann
 // (siehe getToken() in config.js). Werden vor jedem Kindprozess entfernt.
@@ -141,6 +159,15 @@ const PFAD_PRAEFIXE = ['npm_'];
 
 const TIMEOUT_MS = 20 * 60 * 1000;
 const wurzel = path.resolve(__dirname, '..');
+
+// Bewusst EIN einzelnes Wort ohne Leerzeichen (Bindestriche statt
+// Leerzeichen) - warum, steht ausfuehrlich beim Kommentar zu
+// passeBefehlFuerPlattformAn(): unter Windows (shell:true) wuerde ein
+// mehrwoertiger String in cmd.exe in einzelne Positionals zerfallen, und die
+// claude-CLI kennt fuer den Prompt nur EIN Positional. Der eigentliche
+// Auftrag steht ohnehin vollstaendig in SELBSTVERBESSERUNG_AUFGABE.md (siehe
+// baueAufgabe weiter unten) - dieser Prompt muss nur noch dorthin verweisen.
+const CLAUDE_PROMPT = 'Lies-SELBSTVERBESSERUNG_AUFGABE.md-im-Projekt-Root-und-arbeite-die-Aufgabe-ab';
 
 function slug(titel) {
   return String(titel || 'problem')
@@ -179,22 +206,44 @@ function killeHartUnterWindows(pid) {
 // Unter Windows ist `claude` kein direkt startbares Programm, sondern ein
 // von npm erzeugtes claude.cmd/claude.ps1-Skript. `spawn('claude', ...)` ohne
 // shell:true sucht dort nur nach echten Binaerdateien und schlaegt mit ENOENT
-// fehl - gemessen an einem echten Testlauf. Zwei Wege haben im Test
-// funktioniert: die echte claude.exe direkt ansprechen (Pfad haengt von der
-// jeweiligen npm-Installation ab, nicht portabel) oder shell:true zusammen
-// mit dem Namen claude.cmd (portabel, kein hartcodierter Pfad). Zweiteres
-// wird hier verwendet - und zwar NUR fuer den claude-Aufruf: die
-// bestehenden git-Aufrufe sprechen git.exe direkt an, eine echte
-// Binaerdatei, die ohne Shell funktioniert, und sollen shell:true nicht
-// bekommen - das waere eine unnoetige Ausweitung dessen, was der Kindprozess
-// darf (mit shell:true fuehrt Node den Befehl ueber cmd.exe /d /s /c "..."
-// aus).
-// Gegengeprueft: die Argumente, die beim claude-Aufruf tatsaechlich
-// mitgegeben werden (Prompt-Text und Flag-Werte in starteSession), sind
-// feste, selbst geschriebene Strings ohne Benutzereingabe und ohne
-// Shell-Sonderzeichen (kein &, |, ^, keine Anfuehrungszeichen) - das
-// automatische Escaping von Node fuer shell:true unter Windows wird hier
-// also nicht auf die Probe gestellt.
+// fehl - gemessen an einem echten Testlauf. shell:true zusammen mit dem
+// Namen claude.cmd behebt das: portabel, kein hartcodierter Pfad wie bei der
+// echten claude.exe, deren Pfad von der jeweiligen npm-Installation abhaengt.
+//
+// KORRIGIERT, weil hier vorher eine falsche Annahme stand: Node fuegt bei
+// shell:true die Argumente NICHT einzeln gequotet zusammen. Es baut
+// command + args mit je einem Leerzeichen zu EINER Kommandozeile zusammen
+// und uebergibt die an `cmd.exe /d /s /c "..."` - ein Argument, das selbst
+// ein Leerzeichen enthaelt, zerfaellt dort in mehrere Woerter, weil cmd.exe
+// die urspruenglichen Argumentgrenzen gar nicht mehr kennt. Gemessen mit
+// genau den Argumenten, die starteSession() an den claude-Aufruf uebergeben
+// hat (damals noch mit dem mehrwoertigen Prompt-Satz), gegen ein .cmd-Shim,
+// das seine eigene argv in eine Datei schreibt:
+//   ["-p","Lies","SELBSTVERBESSERUNG_AUFGABE.md","im","Projekt-Root","und",
+//    "arbeite","die","Aufgabe","ab.","--permission-mode","bypassPermissions"]
+// statt der erwarteten 4 Eintraege. Die claude-CLI hat aber nur EIN
+// Positional fuer den Prompt (`claude [options] [command] [prompt]`) -
+// unter Windows waere davon praktisch nur "Lies" als Prompt angekommen, der
+// Rest waeren ueberzaehlige Positionals gewesen. Die Session haette nie
+// erfahren, dass sie SELBSTVERBESSERUNG_AUFGABE.md lesen soll: das Feature
+// waere unter Windows kaputt gewesen, trotz gruener Tests - die frueheren
+// Tests pruefen nur, wie die Argumente VOR dem Spawn zusammengesetzt sind,
+// nicht, was cmd.exe danach damit macht.
+// Der eigentliche Fix dafuer steht deshalb nicht hier, sondern beim Prompt
+// selbst: CLAUDE_PROMPT weiter unten ist bewusst EIN einzelnes Wort ohne
+// Leerzeichen (Bindestriche statt Leerzeichen), genau damit dieses
+// Auseinanderfallen strukturell nicht mehr passieren kann - unabhaengig
+// davon, wie viele Argumente insgesamt uebergeben werden. Wer hier spaeter
+// ein neues Argument MIT Leerzeichen ergaenzt, muss entweder dasselbe Muster
+// verwenden oder eine echte Windows-Quotierung nachruesten (z.B. Argumente
+// mit Leerzeichen selbst in doppelte Anfuehrungszeichen setzen) - Stand
+// jetzt ist WEDER das eine noch das andere fuer beliebige kuenftige
+// Argumente automatisch abgesichert.
+//
+// Und zwar NUR fuer den claude-Aufruf: die bestehenden git-Aufrufe sprechen
+// git.exe direkt an, eine echte Binaerdatei, die ohne Shell funktioniert,
+// und sollen shell:true nicht bekommen - das waere eine unnoetige Ausweitung
+// dessen, was der Kindprozess darf.
 function passeBefehlFuerPlattformAn(cmd, options) {
   if (process.platform === 'win32' && cmd === 'claude') {
     return { cmd: 'claude.cmd', options: { ...options, shell: true } };
@@ -384,7 +433,7 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
 
     const lauf = await ausfuehren(
       'claude',
-      ['-p', 'Lies SELBSTVERBESSERUNG_AUFGABE.md im Projekt-Root und arbeite die Aufgabe ab.', '--permission-mode', 'bypassPermissions'],
+      ['-p', CLAUDE_PROMPT, '--permission-mode', 'bypassPermissions'],
       { cwd: klonPfad },
     );
 
@@ -474,5 +523,12 @@ module.exports = {
   // der claude-Aufruf shell:true bekommt und git-Aufrufe unangetastet
   // bleiben, war der Kern des ENOENT-Fixes.
   passeBefehlFuerPlattformAn,
+  // Nur fuer den Integrationstest exportiert: der reicht bis in den echten
+  // spawn() hinein (mit einem .cmd-Shim statt der echten claude-CLI), weil
+  // genau dort - und nicht in der reinen Argument-Zuordnungsfunktion - der
+  // Shell-Zerfall-Fehler steckte, den die reinen Unit-Tests nicht gefunden
+  // haetten.
+  echtAusfuehren,
+  CLAUDE_PROMPT,
   starteSession,
 };
