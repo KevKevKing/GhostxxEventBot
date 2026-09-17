@@ -119,6 +119,47 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
   check('Grund nennt die Remote-URL', ergebnisOhneRemote.fehler.includes('Remote-URL'));
   check('Kein clone ohne Remote-URL', !aufrufeOhneRemote.some((a) => a.startsWith('git clone')));
 
+  section('npm install schlaegt fehl -> Abbruch VOR der Claude-Code-Session');
+  // Gemessen (echter End-zu-Ende-Testlauf, 17.09.): ein frischer Klon hat nie
+  // node_modules, `npm install` laeuft deshalb jetzt VOR dem Start der
+  // Claude-Code-Session. Schlaegt es fehl, kann `npm test` ohnehin nicht
+  // laufen - das ist ein echter Abbruchgrund. Entscheidend hier: die
+  // claude-CLI darf in diesem Fall gar nicht erst aufgerufen werden, und es
+  // darf nichts gepusht werden.
+  let claudeWurdeAufgerufen = false;
+  let gepusht = false;
+  const ergebnisNpmFehler = await session.starteSession(
+    { titel: 'npm install kaputt', belege: [] },
+    {
+      ausfuehren: async (cmd, args) => {
+        if (istRemoteAbfrage(cmd, args)) {
+          return { code: 0, stdout: `${REMOTE_URL}\n`, stderr: '' };
+        }
+        if (cmd === 'npm' && args[0] === 'install') {
+          return { code: 1, stdout: '', stderr: 'npm ERR! kaputtes Netzwerk' };
+        }
+        if (cmd === 'claude') {
+          claudeWurdeAufgerufen = true;
+          return { code: 0, stdout: '', stderr: '' };
+        }
+        if (cmd === 'git' && args[0] === 'push') {
+          gepusht = true;
+          return { code: 0, stdout: '', stderr: '' };
+        }
+        return { code: 0, stdout: '', stderr: '' };
+      },
+      leseZusammenfassung: async () => '',
+    },
+  );
+  check('Als nicht ok gemeldet', ergebnisNpmFehler.ok === false);
+  check(
+    'Grund nennt npm install',
+    ergebnisNpmFehler.fehler.includes('npm install'),
+    ergebnisNpmFehler.fehler,
+  );
+  check('claude-CLI wurde NICHT aufgerufen', claudeWurdeAufgerufen === false);
+  check('Kein Push nach fehlgeschlagenem npm install', gepusht === false);
+
   section('data/ und logs/ stehen auf der Tabu-Liste');
   // Bleibt bestehen, obwohl pruefeWurzel data/ nicht mehr ueberwacht: sollte
   // jemand data/ aus .gitignore nehmen, greift der Diff-Check im eigenen Klon.

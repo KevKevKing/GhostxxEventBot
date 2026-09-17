@@ -240,13 +240,15 @@ function killeHartUnterWindows(pid) {
 // jetzt ist WEDER das eine noch das andere fuer beliebige kuenftige
 // Argumente automatisch abgesichert.
 //
-// Und zwar NUR fuer den claude-Aufruf: die bestehenden git-Aufrufe sprechen
+// Und zwar NUR fuer claude und npm: die bestehenden git-Aufrufe sprechen
 // git.exe direkt an, eine echte Binaerdatei, die ohne Shell funktioniert,
 // und sollen shell:true nicht bekommen - das waere eine unnoetige Ausweitung
-// dessen, was der Kindprozess darf.
+// dessen, was der Kindprozess darf. npm ist unter Windows aus demselben
+// Grund wie claude kein direkt startbares Programm, sondern npm.cmd -
+// betrifft seit dem npm-install-Schritt in starteSession() jetzt auch npm.
 function passeBefehlFuerPlattformAn(cmd, options) {
-  if (process.platform === 'win32' && cmd === 'claude') {
-    return { cmd: 'claude.cmd', options: { ...options, shell: true } };
+  if (process.platform === 'win32' && (cmd === 'claude' || cmd === 'npm')) {
+    return { cmd: `${cmd}.cmd`, options: { ...options, shell: true } };
   }
   return { cmd, options };
 }
@@ -335,7 +337,9 @@ Aenderung. Halte dich an CLAUDE.md in diesem Projekt (Sprache, Konventionen,
 - Starte den Bot nicht, auch nicht direkt mit \`node src/index.js\` oder
   \`npm start\`.
 - Ein Problem, ein fokussierter Commit. Fuehre \`npm test\` aus und
-  committe nur, wenn alle Tests bestehen.
+  committe nur, wenn alle Tests bestehen. Die Abhaengigkeiten
+  (\`node_modules\`) sind bereits installiert - \`npm install\` musst du
+  selbst nicht mehr ausfuehren.
 - Push NICHT selbst - das macht die aufrufende Automatisierung.
 
 ## Am Ende
@@ -428,6 +432,63 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
     const abgezweigt = await ausfuehren('git', ['checkout', '-b', branch], { cwd: klonPfad });
     if (abgezweigt.code !== 0) {
       return { ...ergebnis, fehler: `Branch konnte nicht angelegt werden: ${abgezweigt.stderr}` };
+    }
+
+    // Gemessen bei einem echten End-zu-Ende-Testlauf (Kevin, 17.09.): ein
+    // frischer `git clone` hat nie node_modules - .gitignore schliesst es aus,
+    // wie bei jedem Checkout. Ohne diesen Schritt musste die Claude-Code-
+    // Session selbst erst `npm install` nachholen, bevor `npm test`
+    // ueberhaupt laufen konnte. Dabei hat npm BEILAEUFIG ein veraltetes
+    // Lizenzfeld in package-lock.json korrigiert (ISC -> MIT, passend zu
+    // package.json) - eine inhaltlich richtige, aber laut TABU_MUSTER
+    // verbotene Aenderung an package-lock.json. Die Tabu-Pruefung hat das
+    // danach korrekt blockiert (das ist ihr Job), aber damit auch die
+    // GESAMTE sonst folgenlos richtige Session verworfen. Das waere JEDER
+    // echten Session so ergangen, nicht nur dieser einen: jeder frische Klon
+    // erzwingt ein `npm install`, das so gut wie immer package-lock.json
+    // beruehrt.
+    //
+    // Der Schritt steht deshalb HIER: nach dem Anlegen des Branches, aber vor
+    // dem Schreiben der Aufgaben-Datei und vor dem Start der Claude-Code-
+    // Session - also bevor die Session ueberhaupt zu arbeiten beginnt. Die
+    // Session muss `npm install` damit selbst nicht mehr ausfuehren.
+    //
+    // Ehrlich dazu, weil dieses Modul Restrisiken sonst auch ausspricht statt
+    // sie zu verschweigen: geloest ist damit nur der wahrscheinliche Fall
+    // (die Session sieht schon fertige node_modules und ruft `npm install`
+    // gar nicht erst auf). Wuerde die Session dennoch selbst `git add -A`
+    // oder `git commit -am` statt gezielter Dateien verwenden, koennte sie
+    // die durch DIESEN Schritt bereits im Arbeitsverzeichnis liegende
+    // Aenderung an package-lock.json trotzdem in ihren eigenen Commit
+    // mitziehen - `pruefeTabu` sieht dann wieder denselben Treffer. Eine
+    // Garantie dagegen gibt es ohne echtes Sandboxing nicht; der Prompt in
+    // CLAUDE.md ("ein Problem, ein fokussierter Commit") macht den Fall aber
+    // unwahrscheinlich, und er ist nicht schlimmer als vorher.
+    //
+    // Eigener, kuerzerer Timeout statt TIMEOUT_MS (20 Minuten fuer die
+    // GESAMTE Session): ein haengendes `npm install` darf nicht die
+    // kompletten 20 Minuten aufbrauchen, bevor die eigentliche Claude-Code-
+    // Session ueberhaupt startet. 5 Minuten sind fuer dieses Projekt (wenige
+    // Abhaengigkeiten, kein natives Kompilieren) grosszuegig bemessen und
+    // lassen der eigentlichen Session danach immer noch den Grossteil der
+    // 20 Minuten.
+    const NPM_INSTALL_TIMEOUT_MS = 5 * 60 * 1000;
+    const installiert = await ausfuehren(
+      'npm',
+      ['install'],
+      { cwd: klonPfad, timeoutMs: NPM_INSTALL_TIMEOUT_MS },
+    );
+    if (installiert.code !== 0) {
+      // Ohne Abhaengigkeiten kann die Session nichts sinnvoll testen - das
+      // ist ein echter Fehlerfall, kein Grund, die Claude-Code-Session
+      // trotzdem erst noch zu starten. Aufraeumen passiert wie bei jedem
+      // anderen fruehen Abbruch im `finally` unten.
+      return {
+        ...ergebnis,
+        fehler: installiert.timedOut
+          ? installiert.stderr
+          : `npm install im Klon fehlgeschlagen: ${installiert.stderr || installiert.code}`,
+      };
     }
 
     await fs.writeFile(path.join(klonPfad, 'SELBSTVERBESSERUNG_AUFGABE.md'), baueAufgabe(problem));
