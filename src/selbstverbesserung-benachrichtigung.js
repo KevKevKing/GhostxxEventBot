@@ -13,10 +13,19 @@ function setBenachrichtigungClient(client) {
   clientRef = client;
 }
 
+// Der eine Fehlerfall, der nicht wie die anderen aussehen darf: die Session
+// hat ausserhalb ihres Worktrees geschrieben (siehe pruefeWurzel in
+// selbstverbesserung-session.js). Das trifft den laufenden Bot sofort.
+const EINBRUCH = 'Session hat den echten Checkout veraendert!';
+
 function baueEmbed({ problem, ergebnis }) {
+  const einbruch = String(ergebnis.fehler || '').startsWith(EINBRUCH);
+
   const embed = new EmbedBuilder()
     .setColor(ergebnis.ok ? 0x57f287 : 0xed4245)
-    .setTitle(ergebnis.ok ? 'Ich hab einen Vorschlag' : 'Ich hab was untersucht, aber nichts brauchbares')
+    .setTitle(einbruch
+      ? '🚨 ACHTUNG: Selbstverbesserung hat den echten Checkout verändert'
+      : (ergebnis.ok ? 'Ich hab einen Vorschlag' : 'Ich hab was untersucht, aber nichts brauchbares'))
     .setDescription(problem.titel)
     .setTimestamp(new Date());
 
@@ -44,6 +53,11 @@ async function sendeJetzt(eintrag) {
 }
 
 async function benachrichtige(eintrag, { now = new Date() } = {}) {
+  // Ein veraenderter echter Checkout wartet nicht bis 10 Uhr. Das ist der
+  // einzige Fall, der die Nachtruhe durchbricht.
+  if (String(eintrag?.ergebnis?.fehler || '').startsWith(EINBRUCH)) {
+    return sendeJetzt(eintrag);
+  }
   if (istNachtruhe(now)) {
     warteschlange.push(eintrag);
     return false;

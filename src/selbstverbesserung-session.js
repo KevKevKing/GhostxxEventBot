@@ -5,23 +5,44 @@ const os = require('node:os');
 const { getBerlinDateStamp } = require('./time');
 
 // Stoesst eine non-interaktive Claude-Code-Session auf einem eigenen,
-// isolierten git-worktree an. Zwei Dinge sind TATSAECHLICH garantiert, mehr
-// nicht: (1) im Worktree liegt keine .env-Datei (gitignored, ein frischer
-// Checkout enthaelt sie nicht), (2) der Kindprozess bekommt ein bereinigtes
-// Environment ohne DISCORD_TOKEN/BOT_TOKEN/TOKEN (echtAusfuehren() filtert
-// das explizit heraus - ohne diesen Filter wuerde Node das komplette
-// process.env des laufenden Bots vererben, inklusive Token, egal ob im
-// Worktree eine .env liegt). Zusammen verhindert das, dass ein `node
-// src/index.js` im Worktree sich mit dem echten Token einloggen und den Bot
-// doppelt starten koennte. Gegen main/Tabu-Bereiche wird zusaetzlich der
-// tatsaechliche Diff geprueft, nicht nur der Prompt vertraut (Kevins
-// Leitplanken sollen technisch gelten, nicht nur behauptet werden).
+// isolierten git-worktree an.
+//
+// Was hier TATSAECHLICH schuetzt, ehrlich aufgezaehlt:
+//
+//   1. Env-Sanitizing (bereinigteUmgebung): der Kindprozess bekommt kein
+//      DISCORD_TOKEN/BOT_TOKEN/TOKEN. Ohne diesen Filter wuerde Node das
+//      komplette process.env des laufenden Bots vererben - dann koennte ein
+//      `node src/index.js` im Worktree sich mit dem echten Token einloggen
+//      und den Bot doppelt starten. Im Worktree selbst liegt ausserdem keine
+//      .env (gitignored, ein frischer Checkout enthaelt sie nicht).
+//   2. Der Tabu-Diff: was im Worktree committet wurde, wird gegen
+//      TABU_MUSTER geprueft, statt dem Prompt zu vertrauen.
+//   3. Die Vorher/Nachher-Pruefung des ECHTEN Checkouts (pruefeWurzel):
+//      `git status --porcelain -- data/ src/` im Wurzelverzeichnis vor und
+//      nach der Session. Der Worktree liegt unter os.tmpdir(), aber die
+//      Session hat vollen Bash-Zugriff und koennte ueber die .git-Datei den
+//      Pfad zum echten Checkout finden. Eine Aenderung dort wirkt SOFORT,
+//      nicht erst nach einem Neustart - das ist der Fall, an dem laut
+//      CLAUDE.md echte Auszahlungen haengen.
+//
+// Was hier NICHT schuetzt, und das soll so dastehen: ein Prozess mit Bash
+// ist ohne echtes Sandboxing grundsaetzlich nicht einsperrbar. Punkt 3 ist
+// eine ERKENNUNG, keine Verhinderung - sie schlaegt nach der Tat an, aber
+// sie schlaegt wenigstens an, statt dass die Isolation nur behauptet wird.
+// Das Restrisiko bleibt und wird bewusst nicht durch Sandboxing geschlossen.
 
 const TABU_MUSTER = [
   'src/event-', 'src/scheduler.js', 'src/storage.js', 'src/archiver.js',
   'src/logbook', 'src/logbuch-', 'src/auszahlung-saetze.js',
   'src/giveaway', 'src/state-', '.env', 'env',
+  // Fachdaten und Logs: die Session hat dort nichts zu suchen, weder lesend
+  // noch schreibend - in data/ stehen Namen und Spielernummern.
+  'data/', 'logs/',
 ];
+
+// Was im echten Checkout unveraendert bleiben MUSS. Bewusst knapp: data/
+// (Fachdaten, wirkt sofort) und src/ (Code des laufenden Bots).
+const WURZEL_PFADE = ['data/', 'src/'];
 
 // Namen, unter denen der echte Discord-Token in process.env stehen kann
 // (siehe getToken() in config.js). Werden vor jedem Kindprozess entfernt.
@@ -123,6 +144,14 @@ Aenderung. Halte dich an CLAUDE.md in diesem Projekt (Sprache, Konventionen,
   src/giveaway*.js, src/state-*.js). Wenn das Problem dort liegt, beschreibe
   es stattdessen nur in der Zusammenfassung, aendere nichts.
 - Fasse .env/env nicht an.
+- **Arbeite AUSSCHLIESSLICH in diesem Arbeitsverzeichnis.** Wechsle nie in ein
+  Elternverzeichnis und nie in einen anderen Checkout desselben Projekts.
+  Suche nicht ueber die .git-Datei nach dem echten Arbeitsverzeichnis des
+  laufenden Bots. Dort laeuft Ghostxx gerade wirklich - eine Aenderung wirkt
+  dort sofort und trifft echte Auszahlungen.
+- **Lies und schreibe nirgendwo \`data/\` oder \`logs/\`** - weder hier noch
+  irgendwo sonst auf dem Rechner. In data/ stehen Klarnamen und
+  Spielernummern von 251 Leuten.
 - Fuehre restart-bot.ps1 oder stop-bot.ps1 nicht aus.
 - Starte den Bot nicht, auch nicht direkt mit \`node src/index.js\` oder
   \`npm start\`.
@@ -151,6 +180,23 @@ async function pruefeTabu(worktreePfad, ausfuehren) {
   return { treffer, dateien };
 }
 
+/**
+ * Zustand des ECHTEN Checkouts als vergleichbarer Text. Wird vor und nach
+ * der Session aufgerufen; unterscheiden sich die beiden Ergebnisse, hat die
+ * Session ausserhalb ihres Worktrees geschrieben.
+ *
+ * Bewusst ueber `ausfuehren` und nicht direkt ueber child_process, damit der
+ * Test die Antwort steuern kann.
+ */
+async function pruefeWurzel(ausfuehren) {
+  const stand = await ausfuehren('git', ['status', '--porcelain', '--', ...WURZEL_PFADE], { cwd: wurzel });
+  // Bei einem Fehler (code != 0) gibt es keinen verwertbaren Zustand. Dann
+  // lieber null als eine leere Zeichenkette: null vergleicht sich mit nichts
+  // und loest keinen Fehlalarm aus, sagt aber auch kein "alles gut".
+  if (stand.code !== 0) return null;
+  return stand.stdout.split(/\r?\n/).map((z) => z.trim()).filter(Boolean).sort().join('\n');
+}
+
 async function leseZusammenfassungStandard(worktreePfad) {
   const datei = path.join(worktreePfad, 'SELBSTVERBESSERUNG_ZUSAMMENFASSUNG.md');
   try {
@@ -167,6 +213,10 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
   const worktreePfad = path.join(os.tmpdir(), `ghostxx-${slug(problem.titel)}-${Date.now()}`);
 
   let ergebnis = { ok: false, branch, zusammenfassung: '', fehler: '' };
+
+  // Zustand des echten Checkouts VOR allem anderen festhalten - danach legt
+  // "git worktree add" zwar etwas an, aber nichts in data/ oder src/.
+  const wurzelVorher = await pruefeWurzel(ausfuehren);
 
   try {
     const angelegt = await ausfuehren('git', ['worktree', 'add', worktreePfad, '-b', branch, 'main'], { cwd: wurzel });
@@ -189,6 +239,21 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
     const zusammenfassung = leseZusammenfassung
       ? await leseZusammenfassung(worktreePfad)
       : await leseZusammenfassungStandard(worktreePfad);
+
+    // Der ernsteste denkbare Fehlerfall, deshalb ganz vorn - noch vor der
+    // Frage, ob die Session ueberhaupt erfolgreich war. Auch eine
+    // abgebrochene oder abgelaufene Session kann vorher am echten Checkout
+    // geschrieben haben.
+    const wurzelNachher = await pruefeWurzel(ausfuehren);
+    if (wurzelVorher !== null && wurzelNachher !== null && wurzelVorher !== wurzelNachher) {
+      return {
+        ...ergebnis,
+        zusammenfassung,
+        fehler: 'Session hat den echten Checkout veraendert! '
+          + 'git status in data/ oder src/ des Wurzelverzeichnisses sieht nach der Session anders aus als davor. '
+          + 'Nichts gepusht. Bitte SOFORT von Hand pruefen: git status und git diff im echten Arbeitsverzeichnis.',
+      };
+    }
 
     if (lauf.code !== 0) {
       const fehlerText = lauf.timedOut

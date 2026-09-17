@@ -74,6 +74,64 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
   check('Kein Push bei Tabu-Verstoss', !aufrufeTabu.some((a) => a.startsWith('git push')));
   check('Trotzdem aufgeraeumt', aufrufeTabu.some((a) => a.includes('worktree remove')));
 
-  raeumeAuf(extrahiereWorktreePfad(rohAufrufe), extrahiereWorktreePfad(rohAufrufeTabu));
+  section('data/ und logs/ stehen auf der Tabu-Liste');
+  check('data/ ist tabu', session.TABU_MUSTER.includes('data/'));
+  check('logs/ ist tabu', session.TABU_MUSTER.includes('logs/'));
+
+  section('Aufgabentext verbietet den Ausbruch aus dem Worktree');
+  // Der Prompt ist keine technische Grenze, aber er soll die Regel wenigstens
+  // aussprechen - sonst haelt sich auch eine gutwillige Session nicht daran.
+  const rohAufrufePrompt = [];
+  await session.starteSession(
+    { titel: 'Prompt-Pruefung', belege: [] },
+    {
+      ausfuehren: async (cmd, args) => {
+        rohAufrufePrompt.push({ cmd, args });
+        return { code: 0, stdout: '', stderr: '' };
+      },
+      leseZusammenfassung: async () => '',
+    },
+  );
+  const promptPfad = extrahiereWorktreePfad(rohAufrufePrompt);
+  const aufgabenText = fs.readFileSync(`${promptPfad}/SELBSTVERBESSERUNG_AUFGABE.md`, 'utf8');
+  check('Prompt verbietet Elternverzeichnis/anderen Checkout', aufgabenText.includes('AUSSCHLIESSLICH in diesem Arbeitsverzeichnis'));
+  check('Prompt verbietet data/ und logs/', aufgabenText.includes('data/') && aufgabenText.includes('logs/'));
+
+  section('Session hat den echten Checkout veraendert -> Alarm, kein Push');
+  const aufrufeEinbruch = [];
+  const rohAufrufeEinbruch = [];
+  let statusAufrufe = 0;
+  const fakeAusfuehrenEinbruch = async (cmd, args) => {
+    aufrufeEinbruch.push([cmd, ...args].join(' '));
+    rohAufrufeEinbruch.push({ cmd, args });
+    if (cmd === 'git' && args[0] === 'status') {
+      statusAufrufe += 1;
+      // Erster Aufruf: sauber. Zweiter (nach der Session): jemand hat in
+      // data/ geschrieben.
+      return { code: 0, stdout: statusAufrufe === 1 ? '' : ' M data/events.json\n', stderr: '' };
+    }
+    if (cmd === 'git' && args[0] === 'diff') {
+      return { code: 0, stdout: 'src/harmlos.js\n', stderr: '' };
+    }
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  const ergebnisEinbruch = await session.starteSession(
+    { titel: 'Einbruch', belege: [] },
+    { ausfuehren: fakeAusfuehrenEinbruch, leseZusammenfassung: async () => 'x' },
+  );
+
+  check('Echter Checkout wurde vorher und nachher geprueft', statusAufrufe === 2);
+  check('Als nicht ok gemeldet', ergebnisEinbruch.ok === false);
+  check('Meldung nennt den echten Checkout', ergebnisEinbruch.fehler.startsWith('Session hat den echten Checkout veraendert!'));
+  check('Kein Push nach Einbruch', !aufrufeEinbruch.some((a) => a.startsWith('git push')));
+  check('Trotzdem aufgeraeumt', aufrufeEinbruch.some((a) => a.includes('worktree remove')));
+
+  raeumeAuf(
+    extrahiereWorktreePfad(rohAufrufe),
+    extrahiereWorktreePfad(rohAufrufeTabu),
+    promptPfad,
+    extrahiereWorktreePfad(rohAufrufeEinbruch),
+  );
   finish();
 })();
