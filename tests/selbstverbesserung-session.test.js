@@ -1,27 +1,37 @@
 const fs = require('node:fs');
-const os = require('node:os');
-const path = require('node:path');
 const { check, equal, finish, section } = require('./lib');
 const session = require('../src/selbstverbesserung-session');
 
 // Das Modul legt bei injiziertem `ausfuehren` (hier im Test) echte temporaere
-// Verzeichnisse unter os.tmpdir() an (mkdir + writeFile), weil `git worktree
-// remove` in den Tests nur gemockt ist und nichts wirklich loescht. Am Ende
-// aufraeumen, damit keine "ghostxx-*"-Verzeichnisse im System-Temp liegen bleiben.
-function raeumeGhostxxTempAuf() {
-  const basis = os.tmpdir();
-  for (const eintrag of fs.readdirSync(basis)) {
-    if (eintrag.startsWith('ghostxx-')) {
-      fs.rmSync(path.join(basis, eintrag), { recursive: true, force: true });
-    }
+// Verzeichnisse an (mkdir + writeFile), weil `git worktree remove` in den
+// Tests nur gemockt ist und nichts wirklich loescht. Am Ende raeumen wir NUR
+// die Pfade auf, die DIESER Testlauf selbst per `git worktree add <pfad> ...`
+// angelegt hat - niemals pauschal alles unter os.tmpdir(), das mit
+// "ghostxx-" anfaengt. Grund: eine echte, gerade laufende Selbstverbesserungs-
+// Session legt ihren Worktree unter genau demselben Namensmuster an, und
+// `npm test` kann waehrenddessen laufen (CLAUDE.md: nach jeder Aenderung
+// npm test). Ein pauschales Aufraeumen wuerde deren Arbeitsverzeichnis mitten
+// im Lauf loeschen.
+function extrahiereWorktreePfad(rohAufrufe) {
+  const treffer = rohAufrufe.find(
+    ({ cmd, args }) => cmd === 'git' && args[0] === 'worktree' && args[1] === 'add',
+  );
+  return treffer ? treffer.args[2] : null;
+}
+
+function raeumeAuf(...pfade) {
+  for (const pfad of pfade) {
+    if (pfad) fs.rmSync(pfad, { recursive: true, force: true });
   }
 }
 
 section('Erfolgreicher Lauf ohne Tabu-Verstoss');
 (async () => {
   const aufrufe = [];
+  const rohAufrufe = [];
   const fakeAusfuehren = async (cmd, args) => {
     aufrufe.push([cmd, ...args].join(' '));
+    rohAufrufe.push({ cmd, args });
     if (cmd === 'git' && args[0] === 'diff') {
       return { code: 0, stdout: 'src/harmlos.js\n', stderr: '' };
     }
@@ -44,8 +54,10 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
 
   section('Tabu-Datei angefasst -> automatisch abgelehnt, kein Push');
   const aufrufeTabu = [];
+  const rohAufrufeTabu = [];
   const fakeAusfuehrenTabu = async (cmd, args) => {
     aufrufeTabu.push([cmd, ...args].join(' '));
+    rohAufrufeTabu.push({ cmd, args });
     if (cmd === 'git' && args[0] === 'diff') {
       return { code: 0, stdout: 'src/scheduler.js\n', stderr: '' };
     }
@@ -62,6 +74,6 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
   check('Kein Push bei Tabu-Verstoss', !aufrufeTabu.some((a) => a.startsWith('git push')));
   check('Trotzdem aufgeraeumt', aufrufeTabu.some((a) => a.includes('worktree remove')));
 
-  raeumeGhostxxTempAuf();
+  raeumeAuf(extrahiereWorktreePfad(rohAufrufe), extrahiereWorktreePfad(rohAufrufeTabu));
   finish();
 })();

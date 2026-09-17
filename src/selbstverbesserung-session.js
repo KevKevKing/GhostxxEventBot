@@ -51,7 +51,7 @@ function killeHartUnterWindows(pid) {
   // nicht dessen eigene Unterprozesse (z.B. wenn die Claude-CLI selbst npm
   // oder git startet) - die wuerden als Waisen weiterlaufen und sich die GPU
   // mit GTA teilen. taskkill mit /T beendet den ganzen Prozessbaum.
-  exec(`taskkill /PID ${pid} /T /F`, () => {
+  exec(`taskkill /PID ${pid} /T /F`, { env: bereinigteUmgebung() }, () => {
     // Fehler hier ignorieren - z.B. wenn der Prozess schon beendet ist.
   });
 }
