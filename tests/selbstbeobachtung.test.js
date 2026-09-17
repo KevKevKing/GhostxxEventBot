@@ -68,6 +68,33 @@ beobachtung.registriereBeobachtung();
   await gedaechtnis.neuerEintrag({ titel: 'Wiederholte Abstuerze', belege: crashProblem.belege });
   check('Kein erneuter Fund bei Crashschleife', (await beobachtung.crashSchleifeErkannt()) === null);
 
+  section('Kappung auf 300 greift schon beim Schreiben, nicht erst beim naechsten Laden');
+  // Der Bot laeuft laut CLAUDE.md wochenlang durch (Neustart nur bei
+  // Absturz) - speichereVerlauf() muss deshalb bei JEDEM Schreiben kappen,
+  // nicht nur ladeVerlauf() beim einmaligen Laden. logError() +
+  // registriereBeobachtung() speichern feuer-und-vergiss (kein Promise nach
+  // aussen) - deshalb nach jedem Aufruf kurz der Ereignisschleife Zeit
+  // geben, damit die Schreibvorgaenge sequenziell durchlaufen, statt sich
+  // gegenseitig zu ueberholen (siehe bekannte Einschraenkung im Bericht).
+  const datenDatei = path.join(config.dataDir, 'selbstbeobachtung-verlauf.json');
+  for (let i = 0; i < 320; i += 1) {
+    logError('Fuellfehler', new Error(`Fuellung ${i}`));
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((resolve) => { setTimeout(resolve, 2); });
+  }
+  // writeFileAtomic wiederholt ein blockiertes Umbenennen bis zu 1000ms lang
+  // (siehe atomic-write.js) - genug Zeit lassen, damit wirklich der letzte
+  // Schreibvorgang durch ist, bevor gelesen und aufgeraeumt wird. Sonst
+  // schlaegt cleanup() auf Windows gelegentlich mit ENOTEMPTY fehl, weil noch
+  // eine .tmp-Datei haengt.
+  await new Promise((resolve) => { setTimeout(resolve, 1500); });
+  const geschrieben = JSON.parse(fs.readFileSync(datenDatei, 'utf8'));
+  check(
+    'Datei bleibt direkt nach dem Schreiben auf 300 Eintraege gekappt',
+    geschrieben.eintraege.length <= 300,
+    `tatsaechlich ${geschrieben.eintraege.length}`,
+  );
+
   temp.cleanup();
   finish();
 })();

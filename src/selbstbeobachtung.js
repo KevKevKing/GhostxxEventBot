@@ -20,14 +20,22 @@ let verlauf = null;
 let ladenPromise = null;
 
 /**
- * Laedt die Historie einmalig und haelt sie danach im Speicher. Aeltere als
- * 24h werden beim Laden verworfen, auf 300 Eintraege gekappt (behaelt die
- * neuesten) - wie im Brief gefordert, nicht beim Speichern.
- *
- * Gemeinsame ladenPromise, damit zwei Fehler kurz nacheinander (bevor der
- * erste Ladevorgang fertig ist) nicht zwei unabhaengige Arrays bekommen und
- * sich beim Speichern gegenseitig ueberschreiben.
+ * Aeltere als 24h raus, auf 300 Eintraege kappen (behaelt die neuesten) -
+ * wie im Brief gefordert. Eine einzige Stelle fuer beide Aufrufer: beim
+ * Laden (einmalig) UND bei jedem Speichern - der Bot laeuft wochenlang
+ * durch, ohne die Kappung bei jedem Schreiben wuerde data/selbstbeobach-
+ * tung-verlauf.json (und das Array im Speicher) im Betrieb unbegrenzt
+ * weiterwachsen, das 300er-Limit wuerde erst beim naechsten Neustart wieder
+ * gelten.
  */
+function bereinigt(eintraege) {
+  const grenze = Date.now() - AUFBEWAHRUNG_MS;
+  return eintraege
+    .filter((e) => new Date(e.zeit).getTime() >= grenze)
+    .slice(-MAX_VERLAUF);
+}
+
+/** Laedt die Historie einmalig und haelt sie danach im Speicher. */
 async function ladeVerlauf() {
   if (verlauf) return verlauf;
   if (!ladenPromise) {
@@ -39,10 +47,7 @@ async function ladeVerlauf() {
       } catch {
         geladen = [];
       }
-      const grenze = Date.now() - AUFBEWAHRUNG_MS;
-      verlauf = geladen
-        .filter((e) => new Date(e.zeit).getTime() >= grenze)
-        .slice(-MAX_VERLAUF);
+      verlauf = bereinigt(geladen);
       return verlauf;
     })();
   }
@@ -50,6 +55,7 @@ async function ladeVerlauf() {
 }
 
 async function speichereVerlauf() {
+  verlauf = bereinigt(verlauf);
   await fs.mkdir(config.dataDir, { recursive: true });
   await writeFileAtomic(verlaufDatei, JSON.stringify({ eintraege: verlauf }, null, 2));
 }
