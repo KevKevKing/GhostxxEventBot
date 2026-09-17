@@ -6,26 +6,50 @@ const { config } = require('./config');
 const { istBekannt, signatur } = require('./selbstverbesserung-gedaechtnis');
 
 const SCHWELLE = 3;
+// Erkennungsfenster: wie lange ein Fehler zurueckliegen darf, um noch als
+// Teil desselben Musters zu zaehlen (siehe erkenneProblem/crashSchleifeErkannt).
 const FENSTER_MS = 2 * 60 * 60 * 1000;
+// Aufbewahrungsdauer: wie lange ein Eintrag ueberhaupt in der Historie
+// bleibt, unabhaengig vom Erkennungsfenster. Bewusst getrennt - eine kurze
+// Aufbewahrung wuerde die 2h-Fenster-Pruefung selbst kaputt machen.
+const AUFBEWAHRUNG_MS = 24 * 60 * 60 * 1000;
 const MAX_VERLAUF = 300;
 
 const verlaufDatei = path.join(config.dataDir, 'selbstbeobachtung-verlauf.json');
 let verlauf = null;
+let ladenPromise = null;
 
+/**
+ * Laedt die Historie einmalig und haelt sie danach im Speicher. Aeltere als
+ * 24h werden beim Laden verworfen, auf 300 Eintraege gekappt (behaelt die
+ * neuesten) - wie im Brief gefordert, nicht beim Speichern.
+ *
+ * Gemeinsame ladenPromise, damit zwei Fehler kurz nacheinander (bevor der
+ * erste Ladevorgang fertig ist) nicht zwei unabhaengige Arrays bekommen und
+ * sich beim Speichern gegenseitig ueberschreiben.
+ */
 async function ladeVerlauf() {
   if (verlauf) return verlauf;
-  try {
-    const roh = JSON.parse(await fs.readFile(verlaufDatei, 'utf8'));
-    verlauf = Array.isArray(roh.eintraege) ? roh.eintraege : [];
-  } catch {
-    verlauf = [];
+  if (!ladenPromise) {
+    ladenPromise = (async () => {
+      let geladen;
+      try {
+        const roh = JSON.parse(await fs.readFile(verlaufDatei, 'utf8'));
+        geladen = Array.isArray(roh.eintraege) ? roh.eintraege : [];
+      } catch {
+        geladen = [];
+      }
+      const grenze = Date.now() - AUFBEWAHRUNG_MS;
+      verlauf = geladen
+        .filter((e) => new Date(e.zeit).getTime() >= grenze)
+        .slice(-MAX_VERLAUF);
+      return verlauf;
+    })();
   }
-  return verlauf;
+  return ladenPromise;
 }
 
 async function speichereVerlauf() {
-  const grenze = Date.now() - FENSTER_MS;
-  verlauf = verlauf.filter((e) => new Date(e.zeit).getTime() >= grenze).slice(-MAX_VERLAUF);
   await fs.mkdir(config.dataDir, { recursive: true });
   await writeFileAtomic(verlaufDatei, JSON.stringify({ eintraege: verlauf }, null, 2));
 }
