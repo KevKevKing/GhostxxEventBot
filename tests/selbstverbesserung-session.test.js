@@ -1,4 +1,6 @@
 const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { check, equal, finish, section } = require('./lib');
 const session = require('../src/selbstverbesserung-session');
 
@@ -219,6 +221,157 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
     ergebnisOffen.fehler.includes('nicht committet') && ergebnisOffen.fehler.includes('verworfen'),
     ergebnisOffen.fehler,
   );
+
+  section('claude-Aufruf nutzt bypassPermissions, nicht acceptEdits');
+  // Gemessen: acceptEdits erlaubt der CLI automatisches Dateischreiben, aber
+  // kein automatisches Ausfuehren von Bash-Befehlen (git add/commit, npm
+  // test) - die Session waere mit acceptEdits nie zu einem Commit gekommen.
+  let claudeAufrufArgs = null;
+  await session.starteSession(
+    { titel: 'Permission-Mode-Pruefung', belege: [] },
+    {
+      ausfuehren: async (cmd, args) => {
+        if (istRemoteAbfrage(cmd, args)) {
+          return { code: 0, stdout: `${REMOTE_URL}\n`, stderr: '' };
+        }
+        if (cmd === 'claude') {
+          claudeAufrufArgs = args;
+        }
+        return { code: 0, stdout: '', stderr: '' };
+      },
+      leseZusammenfassung: async () => '',
+    },
+  );
+  check('claude-Aufruf wurde erfasst', Array.isArray(claudeAufrufArgs));
+  check(
+    'bypassPermissions statt acceptEdits',
+    Boolean(claudeAufrufArgs) && claudeAufrufArgs.includes('bypassPermissions') && !claudeAufrufArgs.includes('acceptEdits'),
+    JSON.stringify(claudeAufrufArgs),
+  );
+
+  section('Windows-Spawn-Fix: nur der claude-Aufruf bekommt shell:true');
+  // Gemessen: spawn('claude', ...) schlaegt unter Windows ohne shell:true mit
+  // ENOENT fehl, weil claude dort als claude.cmd/claude.ps1-Skript installiert
+  // ist. git-Aufrufe sprechen git.exe direkt an und sollen NICHT betroffen
+  // sein. process.platform ist konfigurierbar - hier gezielt fuer den Test
+  // auf 'win32' gesetzt und danach wiederhergestellt.
+  const echtePlattform = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+  try {
+    const claudeAngepasst = session.passeBefehlFuerPlattformAn('claude', { cwd: '/irgendwo' });
+    check('claude wird zu claude.cmd unter win32', claudeAngepasst.cmd === 'claude.cmd', claudeAngepasst.cmd);
+    check('shell:true fuer claude unter win32', claudeAngepasst.options.shell === true);
+
+    const gitAngepasst = session.passeBefehlFuerPlattformAn('git', { cwd: '/irgendwo' });
+    check('git bleibt git unter win32', gitAngepasst.cmd === 'git', gitAngepasst.cmd);
+    check('git bekommt kein shell:true', !gitAngepasst.options.shell);
+  } finally {
+    Object.defineProperty(process, 'platform', echtePlattform);
+  }
+
+  section('Windows-Spawn-Fix greift nicht auf anderen Plattformen');
+  const echtePlattform2 = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+  try {
+    const claudeLinux = session.passeBefehlFuerPlattformAn('claude', {});
+    check('claude bleibt claude unter linux', claudeLinux.cmd === 'claude', claudeLinux.cmd);
+    check('kein shell:true unter linux', !claudeLinux.options.shell);
+  } finally {
+    Object.defineProperty(process, 'platform', echtePlattform2);
+  }
+
+  section('Windows-Integrationstest: der Prompt kommt als EIN Argument an');
+  // Der Fehler, den das Review gefunden hat, waere mit den beiden Tests oben
+  // NIE aufgefallen: die pruefen nur, dass passeBefehlFuerPlattformAn() die
+  // richtige Zuordnung liefert (claude -> claude.cmd, shell:true), nie, was
+  // cmd.exe mit den Argumenten macht, sobald echtAusfuehren() sie wirklich an
+  // spawn() weiterreicht. Deshalb hier ein echter Prozess: ein .cmd-Shim,
+  // das seine eigene argv in eine Datei schreibt, aufgerufen ueber die
+  // tatsaechliche echtAusfuehren()-Funktion mit genau den Argumenten, die
+  // starteSession() an den claude-Aufruf uebergibt (CLAUDE_PROMPT plus
+  // --permission-mode bypassPermissions).
+  // Nur unter win32 aussagekraeftig - anderswo greift der shell:true-Zweig
+  // gar nicht, dort wird uebersprungen statt etwas vorzutaeuschen.
+  if (process.platform === 'win32') {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ghostxx-cmdshim-'));
+    const argvDatei = path.join(tmpDir, 'argv-output.txt');
+    // %~1, %~2, ... entfernen umschliessende Anfuehrungszeichen - genau das
+    // Verhalten, das claude.cmd von npm auch zeigen wuerde. Der Shim schreibt
+    // jedes Argument in eine eigene Zeile, damit ein zerfallenes (in mehrere
+    // Woerter gespaltenes) Argument im Ergebnis sofort als mehrere Zeilen
+    // sichtbar wird.
+    const shimInhalt = [
+      '@echo off',
+      'setlocal EnableDelayedExpansion',
+      `set "outfile=${argvDatei}"`,
+      'if exist "%outfile%" del "%outfile%"',
+      ':loop',
+      'if "%~1"=="" goto :eof',
+      'echo(%~1>> "%outfile%"',
+      'shift',
+      'goto loop',
+    ].join('\r\n');
+    fs.writeFileSync(path.join(tmpDir, 'claude.cmd'), shimInhalt);
+
+    // Wichtig: cmd.exe sucht ein bares "claude.cmd" nicht zuverlaessig zuerst
+    // im cwd - auf diesem Rechner griff sonst der ECHTE, global installierte
+    // claude.cmd von PATH (erkennbar am "Not logged in"-Output), startete
+    // einen echten Netzwerk-Login-Versuch und hinterliess einen
+    // haengenbleibenden Prozess samt gesperrtem Temp-Verzeichnis. Deshalb
+    // hier das Testverzeichnis explizit vorn in PATH einhaengen, damit
+    // garantiert der Shim gefunden wird, nicht die echte CLI.
+    const pathSchluessel = Object.keys(process.env).find((k) => k.toLowerCase() === 'path') || 'Path';
+    const testUmgebung = {
+      ...session.bereinigteUmgebung(),
+      [pathSchluessel]: `${tmpDir}${path.delimiter}${process.env[pathSchluessel] || ''}`,
+    };
+
+    try {
+      const ergebnisSpawn = await session.echtAusfuehren(
+        'claude',
+        ['-p', session.CLAUDE_PROMPT, '--permission-mode', 'bypassPermissions'],
+        { cwd: tmpDir, timeoutMs: 10000, env: testUmgebung },
+      );
+      check('Shim-Aufruf erfolgreich beendet (Code 0)', ergebnisSpawn.code === 0, JSON.stringify(ergebnisSpawn));
+
+      const zeilen = fs.existsSync(argvDatei)
+        ? fs.readFileSync(argvDatei, 'utf8').split(/\r?\n/).filter((z) => z.length > 0)
+        : [];
+      check('Genau 4 Argumente kommen an (kein Zerfall)', zeilen.length === 4, JSON.stringify(zeilen));
+      check('-p kommt an', zeilen[0] === '-p', JSON.stringify(zeilen));
+      check(
+        'Der Prompt kommt unveraendert als EIN Argument an',
+        zeilen[1] === session.CLAUDE_PROMPT,
+        JSON.stringify(zeilen),
+      );
+      check('--permission-mode kommt an', zeilen[2] === '--permission-mode', JSON.stringify(zeilen));
+      check('bypassPermissions kommt an', zeilen[3] === 'bypassPermissions', JSON.stringify(zeilen));
+
+      // Beleg, dass es sich um einen echten, jetzt behobenen Fehler handelt
+      // und nicht um eine erfundene Sorge: mit dem URSPRUENGLICHEN,
+      // mehrwoertigen Prompt-Satz (vor diesem Fix) zerfaellt derselbe Aufruf
+      // ueber denselben Shim tatsaechlich in mehr als 4 Argumente.
+      const alterMehrwoertigerPrompt = 'Lies SELBSTVERBESSERUNG_AUFGABE.md im Projekt-Root und arbeite die Aufgabe ab.';
+      const ergebnisAlt = await session.echtAusfuehren(
+        'claude',
+        ['-p', alterMehrwoertigerPrompt, '--permission-mode', 'bypassPermissions'],
+        { cwd: tmpDir, timeoutMs: 10000, env: testUmgebung },
+      );
+      check('Alter Aufruf (Vergleich) beendet', ergebnisAlt.code === 0, JSON.stringify(ergebnisAlt));
+      const zeilenAlt = fs.existsSync(argvDatei)
+        ? fs.readFileSync(argvDatei, 'utf8').split(/\r?\n/).filter((z) => z.length > 0)
+        : [];
+      check(
+        'Alter Prompt-Satz zerfiel tatsaechlich in mehrere Argumente (der behobene Fehler)',
+        zeilenAlt.length > 4,
+        JSON.stringify(zeilenAlt),
+      );
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+  } else {
+    console.log('  (uebersprungen - nur unter win32 aussagekraeftig, dieser Lauf ist ' + process.platform + ')');
+  }
 
   section('Token bleiben dem Kindprozess verborgen');
   // Regressionstest: ohne diesen Filter erbt die Claude-Code-Session das
