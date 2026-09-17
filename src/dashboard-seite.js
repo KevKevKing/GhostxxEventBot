@@ -731,7 +731,16 @@ function zeichneLauf(l) {
 function zeichneSelbstverbesserung(sv) {
   if (!sv) return '<div class="nichts">Wird noch gezählt…</div>';
 
-  const kopf = '<div class="leise" style="margin-bottom:7px">' + sv.heutigeLaeufe + ' / 5 heute</div>';
+  // "Laeuft gerade" zuerst: eine Session dauert bis zu 20 Minuten, und in der
+  // Zeit ist das die einzige interessante Zeile der Kachel.
+  const jetzt = sv.laeuft
+    ? '<div class="tat dran" style="margin-bottom:7px">'
+      + '<span class="marke warn">läuft gerade</span> <b>' + sicher(sv.problem || '') + '</b>'
+      + (sv.seit ? ' <span class="leise">seit ' + dauer(Math.round((Date.now() - sv.seit) / 1000)) + '</span>' : '')
+      + '</div>'
+    : '';
+
+  const kopf = jetzt + '<div class="leise" style="margin-bottom:7px">' + sv.heutigeLaeufe + ' / 5 heute</div>';
   if (!sv.letzteEintraege.length) return kopf + '<div class="nichts">Noch nichts gemeldet.</div>';
 
   // Dieselben drei Ampelfarben wie ueberall im Dashboard: offen = gelb,

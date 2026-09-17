@@ -1,5 +1,5 @@
 const { check, finish, section } = require('./lib');
-const { tick } = require('../src/selbstverbesserung');
+const { aktuellerLauf, tick } = require('../src/selbstverbesserung');
 
 section('Schalter aus -> komplett untaetig');
 (async () => {
@@ -103,6 +103,38 @@ section('Schalter aus -> komplett untaetig');
   check('Lauf trotz Fehler gezaehlt', aufrufe4.includes('vermerkeLauf'));
   check('Gezaehlt wurde vor dem Start', aufrufe4.indexOf('vermerkeLauf') === aufrufe4.indexOf('neuerEintrag') + 1);
   check('Keine Benachrichtigung trotz Fehler', !aufrufe4.includes('benachrichtige'));
+
+  section('Dashboard sieht die laufende Session');
+  check('Vorher laeuft nichts', aktuellerLauf().laeuft === false);
+
+  let waehrendDerSession = null;
+  await tick({
+    schalterAn: () => true,
+    beobachten: { erkenneProblem: async () => ({ titel: 'Laufendes Problem', belege: [] }), crashSchleifeErkannt: async () => null },
+    limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => {} },
+    session: {
+      starteSession: async () => {
+        waehrendDerSession = aktuellerLauf();
+        return { ok: true, branch: 'b', zusammenfassung: 'z' };
+      },
+    },
+    benachrichtigung: { benachrichtige: async () => {}, sendeAusstehende: async () => 0 },
+    gedaechtnis: { neuerEintrag: async () => ({ id: '5' }), vermerkeSession: async () => {} },
+  });
+  check('Waehrend der Session als laufend gemeldet', waehrendDerSession?.laeuft === true);
+  check('Mit dem Problemtitel', waehrendDerSession?.problem === 'Laufendes Problem');
+  check('Danach wieder aus', aktuellerLauf().laeuft === false);
+
+  // Eine geworfene Session darf die Anzeige nicht haengen lassen.
+  await tick({
+    schalterAn: () => true,
+    beobachten: { erkenneProblem: async () => ({ titel: 'Kaputtes Problem', belege: [] }), crashSchleifeErkannt: async () => null },
+    limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => {} },
+    session: { starteSession: async () => { throw new Error('kaputt'); } },
+    benachrichtigung: { benachrichtige: async () => {}, sendeAusstehende: async () => 0 },
+    gedaechtnis: { neuerEintrag: async () => ({ id: '6' }), vermerkeSession: async () => {}, vermerkeEntscheidung: async () => {} },
+  });
+  check('Auch nach einem Fehler wieder aus', aktuellerLauf().laeuft === false);
 
   finish();
 })();

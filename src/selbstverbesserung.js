@@ -8,6 +8,20 @@ const gedaechtnisEcht = require('./selbstverbesserung-gedaechtnis');
 
 const TICK_MS = 10 * 60 * 1000;
 
+// Was gerade laeuft - fuers Dashboard, nach dem Vorbild von lauf-stand.js.
+// Eine Session dauert bis zu 20 Minuten; ohne diese Anzeige sieht Kevin in
+// der ganzen Zeit nichts und weiss nicht, ob ueberhaupt etwas passiert.
+let laufendesProblem = null;
+let laufSeit = null;
+
+function aktuellerLauf() {
+  return {
+    laeuft: Boolean(laufendesProblem),
+    problem: laufendesProblem,
+    seit: laufSeit,
+  };
+}
+
 /**
  * Eine Runde: verstehen (Beobachter) -> lernen (Gedaechtnis pruefen,
  * Session starten) -> anwenden bleibt bei Kevin (nur Vorschlag+DM).
@@ -75,7 +89,19 @@ async function tick({
     // die richtige Semantik fuer einen Drosselzaehler.
     await limit.vermerkeLauf();
 
-    const ergebnis = await session.starteSession(problem);
+    let ergebnis;
+    laufendesProblem = problem.titel;
+    laufSeit = Date.now();
+    try {
+      ergebnis = await session.starteSession(problem);
+    } finally {
+      // Egal ob Erfolg, Fehler oder Zeitueberschreitung: die Anzeige darf
+      // nicht haengen bleiben, sonst behauptet das Dashboard stundenlang
+      // einen Lauf, den es nicht mehr gibt.
+      laufendesProblem = null;
+      laufSeit = null;
+    }
+
     await gedaechtnis.vermerkeSession(id, ergebnis);
     await benachrichtigung.benachrichtige({ problem, ergebnis });
   } catch (error) {
@@ -124,6 +150,7 @@ function startSelbstverbesserung(client) {
 }
 
 module.exports = {
+  aktuellerLauf,
   startSelbstverbesserung,
   tick,
 };
