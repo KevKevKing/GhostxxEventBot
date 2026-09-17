@@ -81,6 +81,28 @@ const { getBerlinDateStamp } = require('./time');
 // Punkt 4 ist eine ERKENNUNG, keine Verhinderung - sie schlaegt nach der Tat
 // an, aber sie schlaegt wenigstens an, statt dass die Isolation nur
 // behauptet wird.
+//
+// Warum `--permission-mode bypassPermissions` statt `acceptEdits` - auch das
+// gehoert ehrlich hierher, weil es das Ausmass dessen erhoeht, was die
+// Session automatisch darf:
+//   Ein echter Testlauf (in einem harmlosen Testordner, nicht im echten
+//   Repo) hat gezeigt: `acceptEdits` erlaubt der CLI automatisches
+//   Dateischreiben, aber KEIN automatisches Ausfuehren von Bash-Befehlen -
+//   `git add`/`git commit`/`npm test` fragen weiterhin nach, und ohne
+//   jemanden, der die Frage beantwortet, bricht die Session ab. Mit
+//   `acceptEdits` haette dieses Feature also nie tatsaechlich committet -
+//   es haette nie einen echten Vorschlag liefern koennen. Ein zweiter Test
+//   mit `bypassPermissions` im selben Testordner hat funktioniert: Datei
+//   geschrieben, `git add` und `git commit` automatisch ausgefuehrt, nichts
+//   darueber hinaus, keine Auffaelligkeiten.
+//   Die CLI selbst empfiehlt `bypassPermissions` nur fuer Umgebungen ohne
+//   Internetzugang - diese Session braucht aber Internet (klont vom
+//   GitHub-Remote, pusht dorthin). Das ist ein bewusst in Kauf genommenes,
+//   erhoehtes Risiko, keine geschlossene Luecke. Was es kompensiert: die
+//   bereits bestehenden Massnahmen oben - der Tabu-Diff nach dem Lauf
+//   (Punkt 2), die Vorher/Nachher-Pruefung des echten Checkouts (Punkt 4)
+//   und die Env-Bereinigung (Punkt 1). Keine davon verhindert etwas
+//   WAEHREND des Laufs, sie schlagen alle erst danach an.
 
 const TABU_MUSTER = [
   'src/event-', 'src/scheduler.js', 'src/storage.js', 'src/archiver.js',
@@ -154,11 +176,42 @@ function killeHartUnterWindows(pid) {
   });
 }
 
+// Unter Windows ist `claude` kein direkt startbares Programm, sondern ein
+// von npm erzeugtes claude.cmd/claude.ps1-Skript. `spawn('claude', ...)` ohne
+// shell:true sucht dort nur nach echten Binaerdateien und schlaegt mit ENOENT
+// fehl - gemessen an einem echten Testlauf. Zwei Wege haben im Test
+// funktioniert: die echte claude.exe direkt ansprechen (Pfad haengt von der
+// jeweiligen npm-Installation ab, nicht portabel) oder shell:true zusammen
+// mit dem Namen claude.cmd (portabel, kein hartcodierter Pfad). Zweiteres
+// wird hier verwendet - und zwar NUR fuer den claude-Aufruf: die
+// bestehenden git-Aufrufe sprechen git.exe direkt an, eine echte
+// Binaerdatei, die ohne Shell funktioniert, und sollen shell:true nicht
+// bekommen - das waere eine unnoetige Ausweitung dessen, was der Kindprozess
+// darf (mit shell:true fuehrt Node den Befehl ueber cmd.exe /d /s /c "..."
+// aus).
+// Gegengeprueft: die Argumente, die beim claude-Aufruf tatsaechlich
+// mitgegeben werden (Prompt-Text und Flag-Werte in starteSession), sind
+// feste, selbst geschriebene Strings ohne Benutzereingabe und ohne
+// Shell-Sonderzeichen (kein &, |, ^, keine Anfuehrungszeichen) - das
+// automatische Escaping von Node fuer shell:true unter Windows wird hier
+// also nicht auf die Probe gestellt.
+function passeBefehlFuerPlattformAn(cmd, options) {
+  if (process.platform === 'win32' && cmd === 'claude') {
+    return { cmd: 'claude.cmd', options: { ...options, shell: true } };
+  }
+  return { cmd, options };
+}
+
 function echtAusfuehren(cmd, args, options = {}) {
   return new Promise((resolve) => {
     let p;
+    const angepasst = passeBefehlFuerPlattformAn(cmd, options);
     try {
-      p = spawn(cmd, args, { windowsHide: true, ...options, env: options.env || bereinigteUmgebung() });
+      p = spawn(angepasst.cmd, args, {
+        windowsHide: true,
+        ...angepasst.options,
+        env: angepasst.options.env || bereinigteUmgebung(),
+      });
     } catch (fehler) {
       // Ein synchroner Wurf (z.B. bei kaputten Argumenten) soll nie das
       // zurueckgegebene Promise rejecten - starteSession() erwartet immer
@@ -331,7 +384,7 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
 
     const lauf = await ausfuehren(
       'claude',
-      ['-p', 'Lies SELBSTVERBESSERUNG_AUFGABE.md im Projekt-Root und arbeite die Aufgabe ab.', '--permission-mode', 'acceptEdits'],
+      ['-p', 'Lies SELBSTVERBESSERUNG_AUFGABE.md im Projekt-Root und arbeite die Aufgabe ab.', '--permission-mode', 'bypassPermissions'],
       { cwd: klonPfad },
     );
 
@@ -417,5 +470,9 @@ module.exports = {
   // durchrutscht, war der schwerwiegendste Fehler, der in diesem Feature
   // bisher gefunden wurde. Das darf nicht ungeprueft bleiben.
   bereinigteUmgebung,
+  // Nur fuer den Regressionstest exportiert: dass unter Windows wirklich nur
+  // der claude-Aufruf shell:true bekommt und git-Aufrufe unangetastet
+  // bleiben, war der Kern des ENOENT-Fixes.
+  passeBefehlFuerPlattformAn,
   starteSession,
 };

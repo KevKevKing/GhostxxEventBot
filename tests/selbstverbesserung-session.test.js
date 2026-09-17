@@ -220,6 +220,64 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
     ergebnisOffen.fehler,
   );
 
+  section('claude-Aufruf nutzt bypassPermissions, nicht acceptEdits');
+  // Gemessen: acceptEdits erlaubt der CLI automatisches Dateischreiben, aber
+  // kein automatisches Ausfuehren von Bash-Befehlen (git add/commit, npm
+  // test) - die Session waere mit acceptEdits nie zu einem Commit gekommen.
+  let claudeAufrufArgs = null;
+  await session.starteSession(
+    { titel: 'Permission-Mode-Pruefung', belege: [] },
+    {
+      ausfuehren: async (cmd, args) => {
+        if (istRemoteAbfrage(cmd, args)) {
+          return { code: 0, stdout: `${REMOTE_URL}\n`, stderr: '' };
+        }
+        if (cmd === 'claude') {
+          claudeAufrufArgs = args;
+        }
+        return { code: 0, stdout: '', stderr: '' };
+      },
+      leseZusammenfassung: async () => '',
+    },
+  );
+  check('claude-Aufruf wurde erfasst', Array.isArray(claudeAufrufArgs));
+  check(
+    'bypassPermissions statt acceptEdits',
+    Boolean(claudeAufrufArgs) && claudeAufrufArgs.includes('bypassPermissions') && !claudeAufrufArgs.includes('acceptEdits'),
+    JSON.stringify(claudeAufrufArgs),
+  );
+
+  section('Windows-Spawn-Fix: nur der claude-Aufruf bekommt shell:true');
+  // Gemessen: spawn('claude', ...) schlaegt unter Windows ohne shell:true mit
+  // ENOENT fehl, weil claude dort als claude.cmd/claude.ps1-Skript installiert
+  // ist. git-Aufrufe sprechen git.exe direkt an und sollen NICHT betroffen
+  // sein. process.platform ist konfigurierbar - hier gezielt fuer den Test
+  // auf 'win32' gesetzt und danach wiederhergestellt.
+  const echtePlattform = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'win32', configurable: true });
+  try {
+    const claudeAngepasst = session.passeBefehlFuerPlattformAn('claude', { cwd: '/irgendwo' });
+    check('claude wird zu claude.cmd unter win32', claudeAngepasst.cmd === 'claude.cmd', claudeAngepasst.cmd);
+    check('shell:true fuer claude unter win32', claudeAngepasst.options.shell === true);
+
+    const gitAngepasst = session.passeBefehlFuerPlattformAn('git', { cwd: '/irgendwo' });
+    check('git bleibt git unter win32', gitAngepasst.cmd === 'git', gitAngepasst.cmd);
+    check('git bekommt kein shell:true', !gitAngepasst.options.shell);
+  } finally {
+    Object.defineProperty(process, 'platform', echtePlattform);
+  }
+
+  section('Windows-Spawn-Fix greift nicht auf anderen Plattformen');
+  const echtePlattform2 = Object.getOwnPropertyDescriptor(process, 'platform');
+  Object.defineProperty(process, 'platform', { value: 'linux', configurable: true });
+  try {
+    const claudeLinux = session.passeBefehlFuerPlattformAn('claude', {});
+    check('claude bleibt claude unter linux', claudeLinux.cmd === 'claude', claudeLinux.cmd);
+    check('kein shell:true unter linux', !claudeLinux.options.shell);
+  } finally {
+    Object.defineProperty(process, 'platform', echtePlattform2);
+  }
+
   section('Token bleiben dem Kindprozess verborgen');
   // Regressionstest: ohne diesen Filter erbt die Claude-Code-Session das
   // komplette process.env des laufenden Bots - inklusive Discord-Token.
