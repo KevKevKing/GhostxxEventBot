@@ -38,6 +38,9 @@ const TABU_MUSTER = [
   // Fachdaten und Logs: die Session hat dort nichts zu suchen, weder lesend
   // noch schreibend - in data/ stehen Namen und Spielernummern.
   'data/', 'logs/',
+  // Billige Zusatzabsicherung: Startskripte, Abhaengigkeiten, die eigenen
+  // Konventionen und die Werkzeugkonfiguration aendert die Session nicht.
+  'scripts/', 'package.json', 'package-lock.json', 'CLAUDE.md', '.claude/',
 ];
 
 // Was im echten Checkout unveraendert bleiben MUSS. Bewusst knapp: data/

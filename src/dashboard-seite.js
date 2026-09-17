@@ -744,10 +744,14 @@ function zeichneSelbstverbesserung(sv) {
   if (!sv.letzteEintraege.length) return kopf + '<div class="nichts">Noch nichts gemeldet.</div>';
 
   // Dieselben drei Ampelfarben wie ueberall im Dashboard: offen = gelb,
-  // abgelehnt/ignoriert = rot, alles andere (z.B. umgesetzt) = gruen.
-  const farbe = (status) => (
-    status === 'offen' ? 'warn' : (status === 'abgelehnt' || status === 'ignoriert' ? 'schlecht' : 'gut')
-  );
+  // angenommen = gruen, abgelehnt/ignoriert = rot. Alles andere ist ein
+  // unbekannter Wert und bekommt bewusst NICHT gruen - gruen heisst hier
+  // "alles gut", und das weiss bei einem unbekannten Status niemand.
+  const farbe = (status) => {
+    if (status === 'angenommen') return 'gut';
+    if (status === 'offen') return 'warn';
+    return 'schlecht';
+  };
 
   const zeilen = sv.letzteEintraege.map((e) => '<div class="tat' + (e.entscheidung === 'offen' ? ' offen' : '') + '">'
     + '<span class="wann">' + (e.erkanntAm ? new Date(e.erkanntAm).toLocaleTimeString('de-DE') : '') + '</span>'

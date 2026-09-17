@@ -24,9 +24,16 @@ function slug(titel) {
     .slice(0, 40) || 'problem';
 }
 
+// Bewusst OHNE mkdir: das Dashboard liest ueber liste() mit, und ein reiner
+// Lesevorgang soll nichts anlegen. Angelegt wird der Ordner nur beim
+// Speichern. Gibt es ihn noch nicht, gibt es eben noch nichts zu lesen.
 async function alleDateien() {
-  await fs.mkdir(ordner, { recursive: true });
-  const namen = await fs.readdir(ordner);
+  let namen;
+  try {
+    namen = await fs.readdir(ordner);
+  } catch {
+    return [];
+  }
   return namen.filter((n) => n.endsWith('.json')).map((n) => path.join(ordner, n));
 }
 
@@ -91,10 +98,21 @@ async function vermerkeSession(id, { branch, zusammenfassung, ok, fehler = '' })
   await speichere(eintrag);
 }
 
+// Genau diese vier Zustaende gibt es. istBekannt() unterscheidet danach, ob
+// ein Problem noch blockiert ('offen', 'abgelehnt') oder nicht - ein
+// verschriebener Wert wuerde dort still als "nicht blockierend" durchgehen.
+const GUELTIGE_STATUS = ['offen', 'angenommen', 'abgelehnt', 'ignoriert'];
+
 async function vermerkeEntscheidung(id, { status, grund = '' }) {
   const eintrag = await findeEintrag(id);
   if (!eintrag) return;
-  eintrag.entscheidung = { status, am: new Date().toISOString(), grund };
+
+  // Ein unbekannter Wert faellt auf 'offen' zurueck, nicht auf 'angenommen':
+  // im Zweifel lieber stehen lassen als als erledigt verbuchen.
+  const sauber = GUELTIGE_STATUS.includes(status) ? status : 'offen';
+  const hinweis = sauber === status ? grund : `${grund} [unbekannter Status "${status}" auf offen gesetzt]`.trim();
+
+  eintrag.entscheidung = { status: sauber, am: new Date().toISOString(), grund: hinweis };
   await speichere(eintrag);
 }
 
@@ -106,6 +124,7 @@ async function liste(limit = 20) {
 }
 
 module.exports = {
+  GUELTIGE_STATUS,
   istBekannt,
   liste,
   neuerEintrag,

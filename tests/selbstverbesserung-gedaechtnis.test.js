@@ -38,6 +38,25 @@ let id;
   check('Nach Ablehnung weiterhin bekannt', await gedaechtnis.istBekannt(sig));
   check('Nach 14 Tagen nicht mehr blockierend', !(await gedaechtnis.istBekannt(sig, { seitTagen: 0 })));
 
+  section('Ungueltiger Status wird nicht uebernommen');
+  await gedaechtnis.vermerkeEntscheidung(id, { status: 'erledigt', grund: 'Tippfehler' });
+  const nachTippfehler = (await gedaechtnis.liste()).find((e) => e.id === id);
+  equal('Faellt auf offen zurueck, nicht auf angenommen', nachTippfehler.entscheidung.status, 'offen');
+  check('Der Tippfehler steht im Grund', nachTippfehler.entscheidung.grund.includes('erledigt'));
+  check('Nur vier gueltige Werte', gedaechtnis.GUELTIGE_STATUS.length === 4);
+
+  section('Reines Lesen legt nichts an');
+  // Das Dashboard liest ueber liste() mit - ein Lesevorgang darf keinen
+  // Ordner anlegen.
+  const leererOrdner = path.join(temp.dir, 'nichts-da');
+  process.env.GEDAECHTNIS_ROOT = leererOrdner;
+  delete require.cache[require.resolve('../src/selbstverbesserung-gedaechtnis')];
+  const frisch = require('../src/selbstverbesserung-gedaechtnis');
+  const leer = await frisch.liste();
+  check('Leere Liste statt Fehler', Array.isArray(leer) && leer.length === 0);
+  check('Kein Ordner angelegt', !fs.existsSync(path.join(leererOrdner, 'Gedächtnis')));
+  process.env.GEDAECHTNIS_ROOT = temp.dir;
+
   temp.cleanup();
   finish();
 })();

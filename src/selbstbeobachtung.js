@@ -71,7 +71,15 @@ async function speichereVerlauf() {
   await writeFileAtomic(verlaufDatei, JSON.stringify({ eintraege: verlauf }, null, 2));
 }
 
+let angemeldet = false;
+
 function registriereBeobachtung() {
+  // Seit logger.onError mehrere Zuhoerer haelt (statt den vorherigen still zu
+  // ersetzen), wuerde ein zweiter Aufruf jeden Fehler doppelt in die Historie
+  // schreiben - und die Schwelle von 3 waere schon bei 2 Fehlern erreicht.
+  if (angemeldet) return;
+  angemeldet = true;
+
   onError((eintrag) => {
     ladeVerlauf().then(async (liste) => {
       liste.push(eintrag);

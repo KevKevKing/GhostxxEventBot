@@ -62,6 +62,16 @@ check('Listener bekam Titel', gehoerteFehler[0]?.titel === 'Erster Testfehler');
 check('Listener bekam Grund', gehoerteFehler[0]?.grund?.includes('Ursache A'));
 check('Listener bekam Zeit', typeof gehoerteFehler[0]?.zeit === 'string');
 
+// Frueher hielt logger.js genau einen Zuhoerer und ersetzte einen frueheren
+// stillschweigend - der zweite Aufrufer haette den ersten lautlos abgeklemmt.
+const zweiteListe = [];
+logger.onError(() => { throw new Error('dieser Zuhoerer ist kaputt'); });
+logger.onError((eintrag) => zweiteListe.push(eintrag));
+logError('Zweiter Testfehler', new Error('Ursache B'));
+check('Erster Listener hoert weiter mit', gehoerteFehler.length === 2);
+check('Zweiter Listener hoert auch', zweiteListe.length === 1);
+check('Ein kaputter Zuhoerer reisst die anderen nicht mit', zweiteListe[0]?.titel === 'Zweiter Testfehler');
+
 section('Ansturm wird gebuendelt');
 // Eine Aufraeumaktion im Server kann dutzende Eintraege auf einmal ausloesen.
 // Einzeln gesendet liefe das sofort ins Discord-Ratelimit.
