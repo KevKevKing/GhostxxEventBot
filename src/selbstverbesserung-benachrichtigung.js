@@ -51,7 +51,7 @@ function setBenachrichtigungClient(client) {
 }
 
 // Der eine Fehlerfall, der nicht wie die anderen aussehen darf: die Session
-// hat ausserhalb ihres Worktrees geschrieben (siehe pruefeWurzel in
+// hat ausserhalb ihres eigenen Klons geschrieben (siehe pruefeWurzel in
 // selbstverbesserung-session.js). Das trifft den laufenden Bot sofort.
 const EINBRUCH = 'Session hat den echten Checkout veraendert!';
 
