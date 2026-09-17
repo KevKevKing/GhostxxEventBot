@@ -35,7 +35,28 @@ async function tick({
   if (!problem) return;
 
   const stand = await limit.darfLaufen();
-  if (!stand.erlaubt) return;
+  if (!stand.erlaubt) {
+    // Frueher: einfach return. Damit wurde derselbe Fund alle 10 Minuten neu
+    // erkannt und lautlos weggeworfen - Kevin erfuhr nie, dass Ghostxx etwas
+    // gesehen hat. Jetzt gibt es einen Gedaechtnis-Eintrag (Status 'offen',
+    // damit istBekannt() das Nachfragen auf EINMAL begrenzt) und genau eine
+    // DM. Gestartet wird nichts, also wird auch kein Lauf vermerkt.
+    try {
+      const { id } = await gedaechtnis.neuerEintrag(problem);
+      const ergebnis = {
+        ok: false,
+        branch: '',
+        zusammenfassung: '',
+        fehler: 'Tageslimit erreicht (5/Tag) - nicht automatisch bearbeitet.',
+      };
+      await gedaechtnis.vermerkeSession(id, ergebnis);
+      await benachrichtigung.benachrichtige({ problem, ergebnis });
+    } catch (error) {
+      console.error('Selbstverbesserung: Tageslimit-Meldung fehlgeschlagen:', error);
+      logError('Fehler in der Selbstverbesserungs-Kette', error);
+    }
+    return;
+  }
 
   // Ab hier haengt am Gedaechtnis-Eintrag (Status 'offen') die 14-Tage-Sperre
   // von istBekannt(): stuerzt irgendein Schritt hier ab, MUSS der Eintrag auf
@@ -46,10 +67,17 @@ async function tick({
   let id;
   try {
     ({ id } = await gedaechtnis.neuerEintrag(problem));
+
+    // Der VERSUCH zaehlt, nicht der Erfolg - und er zaehlt, bevor er beginnt.
+    // Frueher stand das am Ende der Kette: ein dauerhafter Fehler (kaputte
+    // JSON-Datei o.ae.) liess damit endlos ungezaehlte 20-Minuten-Sessions
+    // alle 10 Minuten laufen, ohne je das Tageslimit zu erreichen. Das ist
+    // die richtige Semantik fuer einen Drosselzaehler.
+    await limit.vermerkeLauf();
+
     const ergebnis = await session.starteSession(problem);
     await gedaechtnis.vermerkeSession(id, ergebnis);
     await benachrichtigung.benachrichtige({ problem, ergebnis });
-    await limit.vermerkeLauf();
   } catch (error) {
     console.error('Selbstverbesserung-Fehler in der Kette:', error);
     logError('Fehler in der Selbstverbesserungs-Kette', error);

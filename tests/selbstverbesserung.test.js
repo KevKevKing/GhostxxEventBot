@@ -60,6 +60,22 @@ section('Schalter aus -> komplett untaetig');
     gedaechtnis: { neuerEintrag: async () => { aufrufe3.push('neuerEintrag'); return { id: '1' }; }, vermerkeSession: async () => aufrufe3.push('vermerkeSession') },
   });
   check('Keine Session bei erreichtem Limit', !aufrufe3.includes('starteSession'));
+  check('Fund wird trotzdem vermerkt statt still verworfen', aufrufe3.includes('neuerEintrag'));
+  check('Kevin bekommt eine Meldung', aufrufe3.includes('benachrichtige'));
+  check('Kein Lauf gezaehlt, es lief ja nichts', !aufrufe3.includes('vermerkeLauf'));
+
+  section('Tageslimit-Meldung nennt den Grund');
+  let gemeldet = null;
+  await tick({
+    schalterAn: () => true,
+    beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null },
+    limit: { darfLaufen: async () => ({ erlaubt: false, grund: 'tageslimit' }), vermerkeLauf: async () => {} },
+    session: { starteSession: async () => ({ ok: true }) },
+    benachrichtigung: { benachrichtige: async (e) => { gemeldet = e; }, sendeAusstehende: async () => 0 },
+    gedaechtnis: { neuerEintrag: async () => ({ id: '7' }), vermerkeSession: async () => {} },
+  });
+  check('Meldung sagt Tageslimit', String(gemeldet?.ergebnis?.fehler || '').includes('Tageslimit erreicht'));
+  check('Meldung ist kein Erfolg', gemeldet?.ergebnis?.ok === false);
 
   section('Session wirft -> Eintrag wird ignoriert statt liegen zu bleiben');
   const aufrufe4 = [];
@@ -82,7 +98,10 @@ section('Schalter aus -> komplett untaetig');
   }
   check('tick() wirft selbst nicht weiter', !tickHatGeworfen);
   check('Eintrag auf ignoriert gesetzt', aufrufe4.includes('vermerkeEntscheidung:99:ignoriert'));
-  check('Kein Lauf gezaehlt trotz Fehler', !aufrufe4.includes('vermerkeLauf'));
+  // Der Versuch zaehlt, nicht der Erfolg: sonst wuerde ein dauerhafter Fehler
+  // endlos ungezaehlte Sessions ausloesen und nie ans Tageslimit stossen.
+  check('Lauf trotz Fehler gezaehlt', aufrufe4.includes('vermerkeLauf'));
+  check('Gezaehlt wurde vor dem Start', aufrufe4.indexOf('vermerkeLauf') === aufrufe4.indexOf('neuerEintrag') + 1);
   check('Keine Benachrichtigung trotz Fehler', !aufrufe4.includes('benachrichtige'));
 
   finish();

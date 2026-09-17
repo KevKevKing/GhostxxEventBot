@@ -15,6 +15,17 @@ const FENSTER_MS = 2 * 60 * 60 * 1000;
 const AUFBEWAHRUNG_MS = 24 * 60 * 60 * 1000;
 const MAX_VERLAUF = 300;
 
+// Fehler, die aus der Selbstverbesserung SELBST kommen. Wuerden sie mitgezaehlt,
+// erkennt sich die Selbstverbesserung nach drei eigenen Fehlern in 2 Stunden
+// als "wiederkehrendes Problem" und startet eine Session gegen sich selbst -
+// die dann wieder scheitert und wieder loggt. Bewusst eine kurze Liste
+// konkreter Titel statt einer generischen Regel: sie soll beim Lesen sofort
+// erklaerbar sein.
+const EIGENE_FEHLER = [
+  'Fehler in der Selbstverbesserungs-Kette',
+  'Fehler in der Selbstverbesserung',
+];
+
 const verlaufDatei = path.join(config.dataDir, 'selbstbeobachtung-verlauf.json');
 let verlauf = null;
 let ladenPromise = null;
@@ -72,7 +83,9 @@ function registriereBeobachtung() {
 async function erkenneProblem() {
   const eintraege = await ladeVerlauf();
   const grenze = Date.now() - FENSTER_MS;
-  const aktuelle = eintraege.filter((e) => new Date(e.zeit).getTime() >= grenze);
+  const aktuelle = eintraege.filter(
+    (e) => new Date(e.zeit).getTime() >= grenze && !EIGENE_FEHLER.includes(e.titel),
+  );
 
   const proTitel = new Map();
   for (const eintrag of aktuelle) {

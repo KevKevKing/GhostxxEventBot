@@ -53,6 +53,20 @@ beobachtung.registriereBeobachtung();
   await gedaechtnis.neuerEintrag({ titel: 'Wiederholter Fehler', belege: problem.belege });
   check('Kein erneuter Fund', (await beobachtung.erkenneProblem()) === null);
 
+  section('Eigene Fehler der Selbstverbesserung zaehlen nicht');
+  // Sonst erkennt sich die Selbstverbesserung nach drei eigenen Fehlern
+  // selbst als Problem und startet eine Session gegen sich selbst.
+  for (let i = 0; i < 5; i += 1) {
+    logError('Fehler in der Selbstverbesserungs-Kette', new Error(`intern ${i}`));
+  }
+  await new Promise((resolve) => { setTimeout(resolve, 20); });
+  const selbstProblem = await beobachtung.erkenneProblem();
+  check(
+    'Selbstverbesserungs-Fehler werden nicht als Problem erkannt',
+    selbstProblem === null,
+    `erkannt: ${selbstProblem?.titel}`,
+  );
+
   section('Crashschleife aus logs/bot.log erkennen');
   const jetzt = Date.now();
   schreibeBotLog([
