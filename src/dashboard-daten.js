@@ -13,6 +13,9 @@ const { alleGelesenen } = require('./bild-gedaechtnis');
 const { fortschritt } = require('./bild-vorablesen');
 const { letzteAktivitaet, letzteFehler } = require('./logger');
 const { laufStand } = require('./lauf-stand');
+const { liste: selbstverbesserungListe } = require('./selbstverbesserung-gedaechtnis');
+const { heutigeAnzahl } = require('./selbstverbesserung-limit');
+const { aktuellerLauf } = require('./selbstverbesserung');
 const { teilnahmenJePerson } = require('./meilenstein');
 const { besonderesHeute, schoenerName, MORGENS, ABENDS } = require('./tagesrhythmus');
 const { berlinTimeToDate, getBerlinDateStamp } = require('./time');
@@ -367,6 +370,19 @@ async function stand(client) {
       liste: await alleGelesenen(25).catch(() => []),
     },
     warnungen: await warnungen(client, { anmeldungen, technikStand }),
+    selbstverbesserung: {
+      // Eine Session dauert bis zu 20 Minuten - ohne diese beiden Felder
+      // zeigt die Kachel in der ganzen Zeit nur alte Historie.
+      ...aktuellerLauf(),
+      heutigeLaeufe: await heutigeAnzahl().catch(() => 0),
+      letzteEintraege: (await selbstverbesserungListe(10).catch(() => [])).map((e) => ({
+        id: e.id,
+        titel: e.problem?.titel || '',
+        erkanntAm: e.erkanntAm,
+        entscheidung: e.entscheidung?.status || 'offen',
+        branch: e.session?.branch || '',
+      })),
+    },
     schalter: alleSchalter(),
   };
 }

@@ -95,6 +95,7 @@ module.exports = {
   addDaysToStamp,
   berlinTimeToDate,
   getBerlinDateStamp,
+  getBerlinParts,
   getWeekdayForDateStamp,
   toUnixSeconds,
 };

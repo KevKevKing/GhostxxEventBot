@@ -344,6 +344,9 @@ const HTML = String.raw`<!doctype html>
            font-size: 11px; border: 1px solid var(--rand); color: var(--leise); }
   .m-angriff, .m-verteidigung { color: #ffb08a; border-color: #6b3520; background: rgba(255,140,80,.08); }
   .m-selbst { color: #c4a2ff; border-color: #4a2f6b; background: rgba(160,110,255,.08); }
+  .marke.gut { color: var(--gut); border-color: #1f4d34; background: rgba(53,224,138,.08); }
+  .marke.warn { color: var(--warn); border-color: #5a4712; background: rgba(240,180,41,.08); }
+  .marke.schlecht { color: var(--schlecht); border-color: #5a1f24; background: rgba(255,95,109,.08); }
   .balken { height: 6px; background: #0a1a28; border-radius: 4px; overflow: hidden; min-width: 70px; }
   .balken i { display: block; height: 100%; background: var(--akzent);
               box-shadow: 0 0 8px rgba(34,211,238,.5); }
@@ -480,6 +483,11 @@ const HTML = String.raw`<!doctype html>
       <div class="karte">
         <h2>Letzte Fehler</h2>
         <div id="fehler"></div>
+      </div>
+
+      <div class="karte">
+        <h2>Selbstverbesserung</h2>
+        <div id="selbstverbesserung"></div>
       </div>
     </div>
   </div>
@@ -720,6 +728,40 @@ function zeichneLauf(l) {
     + (l.aktuell ? '<div class="leise">gerade: ' + sicher(l.aktuell) + '</div>' : '');
 }
 
+function zeichneSelbstverbesserung(sv) {
+  if (!sv) return '<div class="nichts">Wird noch gezählt…</div>';
+
+  // "Laeuft gerade" zuerst: eine Session dauert bis zu 20 Minuten, und in der
+  // Zeit ist das die einzige interessante Zeile der Kachel.
+  const jetzt = sv.laeuft
+    ? '<div class="tat dran" style="margin-bottom:7px">'
+      + '<span class="marke warn">läuft gerade</span> <b>' + sicher(sv.problem || '') + '</b>'
+      + (sv.seit ? ' <span class="leise">seit ' + dauer(Math.round((Date.now() - sv.seit) / 1000)) + '</span>' : '')
+      + '</div>'
+    : '';
+
+  const kopf = jetzt + '<div class="leise" style="margin-bottom:7px">' + sv.heutigeLaeufe + ' / 5 heute</div>';
+  if (!sv.letzteEintraege.length) return kopf + '<div class="nichts">Noch nichts gemeldet.</div>';
+
+  // Dieselben drei Ampelfarben wie ueberall im Dashboard: offen = gelb,
+  // angenommen = gruen, abgelehnt/ignoriert = rot. Alles andere ist ein
+  // unbekannter Wert und bekommt bewusst NICHT gruen - gruen heisst hier
+  // "alles gut", und das weiss bei einem unbekannten Status niemand.
+  const farbe = (status) => {
+    if (status === 'angenommen') return 'gut';
+    if (status === 'offen') return 'warn';
+    return 'schlecht';
+  };
+
+  const zeilen = sv.letzteEintraege.map((e) => '<div class="tat' + (e.entscheidung === 'offen' ? ' offen' : '') + '">'
+    + '<span class="wann">' + (e.erkanntAm ? new Date(e.erkanntAm).toLocaleTimeString('de-DE') : '') + '</span>'
+    + '<b>' + sicher(e.titel) + '</b>'
+    + ' <span class="marke ' + farbe(e.entscheidung) + '">' + sicher(e.entscheidung) + '</span>'
+    + '</div>');
+
+  return kopf + zeilen.join('');
+}
+
 function zeichneLogbuch(lb, d) {
   if (!lb) return '<div class="nichts">Wird noch gezählt…</div>';
   if (!lb.zeilen.length) return '<div class="nichts">Nichts offen — alles abgerechnet.</div>';
@@ -796,6 +838,7 @@ const SCHALTER_GRUPPEN = [
   ['Event & Chat', [['eventScheduler', 'Event-Scheduler'], ['terminErinnerungen', 'Termin-Erinnerungen'], ['chat', 'Ghostxx-Chat'], ['commands', 'Alle Commands']]],
   ['Bilder', [['visaBilder', 'Reisepässe prüfen'], ['chatBilder', 'Bilder im Chat lesen']]],
   ['Logbuch', [['logbuchSortieren', 'Tickets sortieren']]],
+  ['Selbstverbesserung', [['selbstverbesserung', 'Selbst verbessern']]],
   ['Discord-Logs', [['auditLog', 'Audit-Log'], ['logNachrichten', 'Nachrichten'], ['logMitglieder', 'Mitglieder & Rollen'], ['logSprache', 'Sprachkanäle'], ['logSelbststumm', 'Mikro & Kopfhörer'], ['logKanaele', 'Kanäle'], ['botLog', 'Bot-Meldungen'], ['fehlerLog', 'Fehler-Meldungen']]],
 ];
 
@@ -960,6 +1003,8 @@ async function laden() {
       '<div class="fehler">' + new Date(f.zeit).toLocaleTimeString('de-DE') + ' — '
       + sicher(f.titel) + ': ' + sicher(f.grund) + '</div>').join('')
     : '<div class="nichts">Keine Fehler.</div>';
+
+  $('selbstverbesserung').innerHTML = zeichneSelbstverbesserung(d.selbstverbesserung);
 }
 
 // ---- Ruhebildschirm --------------------------------------------------------

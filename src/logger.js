@@ -37,6 +37,23 @@ const TARGETS = {
 
 const queues = new Map();
 let clientRef = null;
+const errorListeners = [];
+
+/**
+ * Wird bei jedem logError() zusaetzlich aufgerufen - fuer Module, die eine
+ * eigene, ueber Neustarts hinweg persistierte Fehlerhistorie fuehren wollen
+ * (siehe selbstbeobachtung.js). logger.js selbst bleibt bewusst ohne
+ * Festplattenzugriff, damit bestehende Tests ohne eigenes Datenverzeichnis
+ * weiterlaufen.
+ *
+ * Mehrere Zuhoerer sind erlaubt. Vorher hielt das Modul genau einen und
+ * ueberschrieb einen frueheren stillschweigend - der zweite Aufrufer haette
+ * den ersten lautlos abgeklemmt.
+ */
+function onError(listener) {
+  if (typeof listener !== 'function') return;
+  errorListeners.push(listener);
+}
 
 function setLogClient(client) {
   clientRef = client;
@@ -206,6 +223,17 @@ function logError(title, error, extra = {}) {
   });
   if (fehler.length > FEHLER_SPEICHER) fehler.shift();
 
+  const gemeldet = { zeit: fehler[fehler.length - 1].zeit, titel: title, grund: fehler[fehler.length - 1].grund };
+  for (const listener of errorListeners) {
+    // Ein kaputter Zuhoerer darf weder das Loggen noch die anderen Zuhoerer
+    // mitreissen - hier landen wir ja gerade wegen eines Fehlers.
+    try {
+      listener(gemeldet);
+    } catch (listenerFehler) {
+      console.error('onError-Zuhoerer hat geworfen:', listenerFehler.message);
+    }
+  }
+
   if (!istAn('fehlerLog')) return;
 
   logBotEvent({
@@ -226,6 +254,7 @@ module.exports = {
   logBotEvent,
   logError,
   logEvent,
+  onError,
   setLogClient,
   truncate,
 };

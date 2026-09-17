@@ -1,5 +1,14 @@
-const { check, equal, finish, section } = require('./lib');
-const { artVon, warnungen } = require('../src/dashboard-daten');
+const { check, equal, finish, section, useTempData } = require('./lib');
+
+// GEDAECHTNIS_ROOT und DATA_DIR muessen VOR dem ersten require von
+// dashboard-daten.js gesetzt sein: selbstverbesserung-gedaechtnis.js und
+// selbstverbesserung-limit.js lesen ihre Pfade beim Laden des Moduls, nicht
+// erst beim Aufruf - sonst wuerde der Test ins echte Gedaechtnis-Verzeichnis
+// dieses Worktrees schreiben statt in einen Wegwerf-Ordner.
+const temp = useTempData();
+process.env.GEDAECHTNIS_ROOT = temp.dir;
+
+const { artVon, stand, warnungen } = require('../src/dashboard-daten');
 const { beendeLauf, laufStand, meldeFortschritt, starteLauf } = require('../src/lauf-stand');
 const { seite } = require('../src/dashboard-seite');
 const { laufzeitText, systemWerte } = require('../src/system-werte');
@@ -36,7 +45,9 @@ check('Ende vermerkt', Boolean(s.beendet));
 equal('keine Restzeit mehr', s.restSek, null);
 
 section('Wovor gewarnt wird');
-const stiller = { guilds: { cache: new Map() } };
+// fetch() wird nur von stand() ueber logbuchStand() gebraucht, wenn der
+// Guild-Cache leer ist - warnungen() selbst kommt ohne aus.
+const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
 
 (async () => {
   const ollamaWeg = await warnungen(stiller, {
@@ -185,5 +196,15 @@ const stiller = { guilds: { cache: new Map() } };
   // ausgefuehrt werden, nur angezeigt.
   check('maskiert fremden Text', html.includes('replace(/[<>&]/g'));
 
+  section('Selbstverbesserung im Dashboard sichtbar');
+  const gedaechtnis = require('../src/selbstverbesserung-gedaechtnis');
+  await gedaechtnis.neuerEintrag({ titel: 'Dashboard-Testproblem', belege: [] });
+
+  const stand2 = await stand(stiller);
+  check('selbstverbesserung-Feld vorhanden', Boolean(stand2.selbstverbesserung));
+  check('Heutige Laeufe ist eine Zahl', typeof stand2.selbstverbesserung.heutigeLaeufe === 'number');
+  check('Letzter Eintrag sichtbar', stand2.selbstverbesserung.letzteEintraege.some((e) => e.titel === 'Dashboard-Testproblem'));
+
+  temp.cleanup();
   finish();
 })();
