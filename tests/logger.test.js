@@ -1,7 +1,8 @@
 const { AuditLogEvent } = require('discord.js');
 const { check, finish, section } = require('./lib');
 const { config } = require('../src/config');
-const { logBotEvent, logError, logEvent, setLogClient } = require('../src/logger');
+const logger = require('../src/logger');
+const { logBotEvent, logError, logEvent, setLogClient } = logger;
 const { ACTIONS, formatChanges } = require('../src/audit-log');
 
 section('Abgedeckte Server-Ereignisse');
@@ -52,6 +53,14 @@ setLogClient({
 
 const serverKanal = () => proKanal.get(config.logChannelId) || [];
 const botKanal = () => proKanal.get(config.botLogChannelId) || [];
+
+section('Fehlerhistorie kann mitgehoert werden');
+const gehoerteFehler = [];
+logger.onError((eintrag) => gehoerteFehler.push(eintrag));
+logError('Erster Testfehler', new Error('Ursache A'));
+check('Listener bekam Titel', gehoerteFehler[0]?.titel === 'Erster Testfehler');
+check('Listener bekam Grund', gehoerteFehler[0]?.grund?.includes('Ursache A'));
+check('Listener bekam Zeit', typeof gehoerteFehler[0]?.zeit === 'string');
 
 section('Ansturm wird gebuendelt');
 // Eine Aufraeumaktion im Server kann dutzende Eintraege auf einmal ausloesen.

@@ -37,6 +37,18 @@ const TARGETS = {
 
 const queues = new Map();
 let clientRef = null;
+let errorListener = null;
+
+/**
+ * Wird bei jedem logError() zusaetzlich aufgerufen - fuer Module, die eine
+ * eigene, ueber Neustarts hinweg persistierte Fehlerhistorie fuehren wollen
+ * (siehe selbstbeobachtung.js). logger.js selbst bleibt bewusst ohne
+ * Festplattenzugriff, damit bestehende Tests ohne eigenes Datenverzeichnis
+ * weiterlaufen.
+ */
+function onError(listener) {
+  errorListener = listener;
+}
 
 function setLogClient(client) {
   clientRef = client;
@@ -206,6 +218,8 @@ function logError(title, error, extra = {}) {
   });
   if (fehler.length > FEHLER_SPEICHER) fehler.shift();
 
+  errorListener?.({ zeit: fehler[fehler.length - 1].zeit, titel: title, grund: fehler[fehler.length - 1].grund });
+
   if (!istAn('fehlerLog')) return;
 
   logBotEvent({
@@ -226,6 +240,7 @@ module.exports = {
   logBotEvent,
   logError,
   logEvent,
+  onError,
   setLogClient,
   truncate,
 };
