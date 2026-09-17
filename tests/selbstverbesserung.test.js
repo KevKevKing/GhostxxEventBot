@@ -39,5 +39,28 @@ section('Kein Problem -> nichts passiert');
   });
   check('Keine Session bei erreichtem Limit', !aufrufe3.includes('starteSession'));
 
+  section('Session wirft -> Eintrag wird ignoriert statt liegen zu bleiben');
+  const aufrufe4 = [];
+  let tickHatGeworfen = false;
+  try {
+    await tick({
+      beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null },
+      limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => aufrufe4.push('vermerkeLauf') },
+      session: { starteSession: async () => { throw new Error('kaputt'); } },
+      benachrichtigung: { benachrichtige: async () => aufrufe4.push('benachrichtige'), sendeAusstehende: async () => 0 },
+      gedaechtnis: {
+        neuerEintrag: async () => { aufrufe4.push('neuerEintrag'); return { id: '99' }; },
+        vermerkeSession: async () => aufrufe4.push('vermerkeSession'),
+        vermerkeEntscheidung: async (id, { status }) => aufrufe4.push(`vermerkeEntscheidung:${id}:${status}`),
+      },
+    });
+  } catch {
+    tickHatGeworfen = true;
+  }
+  check('tick() wirft selbst nicht weiter', !tickHatGeworfen);
+  check('Eintrag auf ignoriert gesetzt', aufrufe4.includes('vermerkeEntscheidung:99:ignoriert'));
+  check('Kein Lauf gezaehlt trotz Fehler', !aufrufe4.includes('vermerkeLauf'));
+  check('Keine Benachrichtigung trotz Fehler', !aufrufe4.includes('benachrichtige'));
+
   finish();
 })();

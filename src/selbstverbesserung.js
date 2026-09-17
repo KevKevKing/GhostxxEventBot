@@ -29,11 +29,29 @@ async function tick({
   const stand = await limit.darfLaufen();
   if (!stand.erlaubt) return;
 
-  const { id } = await gedaechtnis.neuerEintrag(problem);
-  const ergebnis = await session.starteSession(problem);
-  await gedaechtnis.vermerkeSession(id, ergebnis);
-  await benachrichtigung.benachrichtige({ problem, ergebnis });
-  await limit.vermerkeLauf();
+  // Ab hier haengt am Gedaechtnis-Eintrag (Status 'offen') die 14-Tage-Sperre
+  // von istBekannt(): stuerzt irgendein Schritt hier ab, MUSS der Eintrag auf
+  // 'ignoriert' gesetzt werden - sonst gilt ein echtes, wiederkehrendes
+  // Problem 14 Tage lang lautlos als "schon bekannt" und wird nie wieder
+  // gemeldet. 'abgelehnt' waere hier falsch, das blockiert genauso wie
+  // 'offen' - es war aber kein echtes Ablehnen, nur ein interner Fehler.
+  let id;
+  try {
+    ({ id } = await gedaechtnis.neuerEintrag(problem));
+    const ergebnis = await session.starteSession(problem);
+    await gedaechtnis.vermerkeSession(id, ergebnis);
+    await benachrichtigung.benachrichtige({ problem, ergebnis });
+    await limit.vermerkeLauf();
+  } catch (error) {
+    console.error('Selbstverbesserung-Fehler in der Kette:', error);
+    logError('Fehler in der Selbstverbesserungs-Kette', error);
+    if (id) {
+      await gedaechtnis.vermerkeEntscheidung(id, {
+        status: 'ignoriert',
+        grund: 'Interner Fehler waehrend der Selbstverbesserung: ' + error.message,
+      });
+    }
+  }
 }
 
 function startSelbstverbesserung(client) {
