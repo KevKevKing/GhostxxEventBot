@@ -360,9 +360,10 @@ async function pruefeTabu(klonPfad, ausfuehren) {
 }
 
 /**
- * Zustand des ECHTEN Checkouts als vergleichbarer Text - ueber WURZEL_PFADE,
- * also nur src/. Wird vor und nach der Session aufgerufen; unterscheiden sich
- * die beiden Ergebnisse, hat die Session ausserhalb ihres Klons geschrieben.
+ * Zustand des ECHTEN Checkouts als vergleichbarer Text - ueber WURZEL_PFADE
+ * (src/, scripts/, .claude/). Wird vor und nach der Session aufgerufen;
+ * unterscheiden sich die beiden Ergebnisse, hat die Session ausserhalb ihres
+ * Klons geschrieben.
  *
  * Fuer data/ gibt es diese Erkennung bewusst nicht (Modulkommentar oben).
  *
@@ -451,7 +452,7 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
         ...ergebnis,
         zusammenfassung,
         fehler: 'Session hat den echten Checkout veraendert! '
-          + 'git status in src/ des Wurzelverzeichnisses sieht nach der Session anders aus als davor. '
+          + `git status in ${WURZEL_PFADE.join(', ')} des Wurzelverzeichnisses sieht nach der Session anders aus als davor. `
           + 'Nichts gepusht. Bitte SOFORT von Hand pruefen: git status und git diff im echten Arbeitsverzeichnis.',
       };
     }
