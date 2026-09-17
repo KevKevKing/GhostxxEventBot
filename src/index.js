@@ -16,6 +16,7 @@ const { registerTicketAufraeumer, ticketsBeimStartAufraeumen } = require('./tick
 const { startPraesenz } = require('./praesenz');
 const { startDashboard } = require('./dashboard');
 const { startTerminErinnerung } = require('./termin-erinnerung');
+const { startSelbstverbesserung } = require('./selbstverbesserung');
 const { registerBildVorablesen } = require('./bild-vorablesen');
 const { registerFamilienListe } = require('./familien-liste');
 const { isReachable, pickModel, warmUp } = require('./ollama');
@@ -118,6 +119,12 @@ async function main() {
       // Nur auf diesem Rechner erreichbar. Faellt es aus, laeuft der Bot
       // unveraendert weiter - es liest nur, es steuert nichts.
       startDashboard(readyClient);
+
+      // Verstehen -> lernen -> anwenden (Vorschlag): beobachtet eigene
+      // Fehler/Abstuerze, schlaegt hoechstens 5x taeglich automatisch einen
+      // Fix vor, wendet nie selbst etwas an - siehe docs/superpowers/specs/
+      // 2026-09-17-ghostxx-selbstverbesserung-design.md.
+      startSelbstverbesserung(readyClient);
 
       // Ollama darf nicht blockieren: laeuft es nicht, funktionieren Events,
       // Slash-Commands und Logging trotzdem weiter. Nur das freie Chatten faellt aus.
