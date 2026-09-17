@@ -37,5 +37,44 @@ section('Sofortiger Versand ausserhalb der Nachtruhe');
   check('Nachtrag zugestellt', anzahl === 1);
   check('Jetzt zwei DMs insgesamt', gesendet.length === 2);
 
+  section('Fehlschlag bei sofortigem Versand');
+  const fehlerGesendet = [];
+  benachrichtigung.setBenachrichtigungClient({
+    users: {
+      fetch: async (id) => ({
+        id,
+        send: async (payload) => { throw new Error('Discord ist gerade nicht erreichbar'); },
+      }),
+    },
+  });
+
+  const jetzta = new Date('2026-09-17T14:00:00+02:00');
+  const fehler = await benachrichtigung.benachrichtige(
+    { problem: { titel: 'Fehlversuch' }, ergebnis: { ok: true, branch: 'x', zusammenfassung: 'y' } },
+    { now: jetzta },
+  );
+  check('Versand schlug fehl, meldet false', fehler === false);
+
+  section('Fehlgeschlagene Warteschlangen-Abarbeitung');
+  benachrichtigung.setBenachrichtigungClient({
+    users: {
+      fetch: async (id) => ({
+        id,
+        send: async (payload) => { throw new Error('Discord ist gerade nicht erreichbar'); },
+      }),
+    },
+  });
+
+  const nachtsb = new Date('2026-09-18T03:00:00+02:00');
+  await benachrichtigung.benachrichtige(
+    { problem: { titel: 'Warteschlangen-Fehler' }, ergebnis: { ok: true, branch: 'x', zusammenfassung: 'y' } },
+    { now: nachtsb },
+  );
+  check('Nachtruhe schiebt in Warteschlange', true);
+
+  const morgensb = new Date('2026-09-18T10:30:00+02:00');
+  const fehlgeschlagenZahl = await benachrichtigung.sendeAusstehende({ now: morgensb });
+  check('Fehlgeschlagene Sendungen zaehlen nicht als Erfolg', fehlgeschlagenZahl === 0);
+
   finish();
 })();

@@ -34,10 +34,13 @@ async function sendeJetzt(eintrag) {
   const user = await clientRef.users.fetch(config.ownerId).catch(() => null);
   if (!user) return false;
 
-  await user.send({ embeds: [baueEmbed(eintrag)] }).catch((error) => {
+  try {
+    await user.send({ embeds: [baueEmbed(eintrag)] });
+    return true;
+  } catch (error) {
     console.error('Selbstverbesserungs-DM konnte nicht gesendet werden:', error.message);
-  });
-  return true;
+    return false;
+  }
 }
 
 async function benachrichtige(eintrag, { now = new Date() } = {}) {
@@ -51,11 +54,13 @@ async function benachrichtige(eintrag, { now = new Date() } = {}) {
 async function sendeAusstehende({ now = new Date() } = {}) {
   if (istNachtruhe(now) || !warteschlange.length) return 0;
 
-  const anzahl = warteschlange.length;
+  let erfolgreich = 0;
   while (warteschlange.length) {
-    await sendeJetzt(warteschlange.shift());
+    const eintrag = warteschlange.shift();
+    const ok = await sendeJetzt(eintrag);
+    if (ok) erfolgreich += 1;
   }
-  return anzahl;
+  return erfolgreich;
 }
 
 module.exports = {
