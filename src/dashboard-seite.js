@@ -344,6 +344,9 @@ const HTML = String.raw`<!doctype html>
            font-size: 11px; border: 1px solid var(--rand); color: var(--leise); }
   .m-angriff, .m-verteidigung { color: #ffb08a; border-color: #6b3520; background: rgba(255,140,80,.08); }
   .m-selbst { color: #c4a2ff; border-color: #4a2f6b; background: rgba(160,110,255,.08); }
+  .marke.gut { color: var(--gut); border-color: #1f4d34; background: rgba(53,224,138,.08); }
+  .marke.warn { color: var(--warn); border-color: #5a4712; background: rgba(240,180,41,.08); }
+  .marke.schlecht { color: var(--schlecht); border-color: #5a1f24; background: rgba(255,95,109,.08); }
   .balken { height: 6px; background: #0a1a28; border-radius: 4px; overflow: hidden; min-width: 70px; }
   .balken i { display: block; height: 100%; background: var(--akzent);
               box-shadow: 0 0 8px rgba(34,211,238,.5); }
@@ -480,6 +483,11 @@ const HTML = String.raw`<!doctype html>
       <div class="karte">
         <h2>Letzte Fehler</h2>
         <div id="fehler"></div>
+      </div>
+
+      <div class="karte">
+        <h2>Selbstverbesserung</h2>
+        <div id="selbstverbesserung"></div>
       </div>
     </div>
   </div>
@@ -718,6 +726,27 @@ function zeichneLauf(l) {
     + l.abgehakt + ' abgehakt · ' + dauer(l.dauerSek)
     + (l.restSek != null ? ' · noch etwa ' + dauer(l.restSek) : '') + '</div>'
     + (l.aktuell ? '<div class="leise">gerade: ' + sicher(l.aktuell) + '</div>' : '');
+}
+
+function zeichneSelbstverbesserung(sv) {
+  if (!sv) return '<div class="nichts">Wird noch gezählt…</div>';
+
+  const kopf = '<div class="leise" style="margin-bottom:7px">' + sv.heutigeLaeufe + ' / 5 heute</div>';
+  if (!sv.letzteEintraege.length) return kopf + '<div class="nichts">Noch nichts gemeldet.</div>';
+
+  // Dieselben drei Ampelfarben wie ueberall im Dashboard: offen = gelb,
+  // abgelehnt/ignoriert = rot, alles andere (z.B. umgesetzt) = gruen.
+  const farbe = (status) => (
+    status === 'offen' ? 'warn' : (status === 'abgelehnt' || status === 'ignoriert' ? 'schlecht' : 'gut')
+  );
+
+  const zeilen = sv.letzteEintraege.map((e) => '<div class="tat' + (e.entscheidung === 'offen' ? ' offen' : '') + '">'
+    + '<span class="wann">' + (e.erkanntAm ? new Date(e.erkanntAm).toLocaleTimeString('de-DE') : '') + '</span>'
+    + '<b>' + sicher(e.titel) + '</b>'
+    + ' <span class="marke ' + farbe(e.entscheidung) + '">' + sicher(e.entscheidung) + '</span>'
+    + '</div>');
+
+  return kopf + zeilen.join('');
 }
 
 function zeichneLogbuch(lb, d) {
@@ -960,6 +989,8 @@ async function laden() {
       '<div class="fehler">' + new Date(f.zeit).toLocaleTimeString('de-DE') + ' — '
       + sicher(f.titel) + ': ' + sicher(f.grund) + '</div>').join('')
     : '<div class="nichts">Keine Fehler.</div>';
+
+  $('selbstverbesserung').innerHTML = zeichneSelbstverbesserung(d.selbstverbesserung);
 }
 
 // ---- Ruhebildschirm --------------------------------------------------------
