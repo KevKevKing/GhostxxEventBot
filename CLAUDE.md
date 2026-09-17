@@ -155,7 +155,8 @@ Stichprobe macht zwei Zahlen unvergleichbar.
 
 - **Der Discord-Token steht im Klartext in `.env.example`.** Kevin will das so.
   Nicht entfernen, nicht zum Zurücksetzen raten.
-- **Das Projekt ist bewusst kein Git-Repo.**
+- **Das Projekt ist bewusst ein Git-Repo** (GitHub: `KevKevKing/GhostxxEventBot`,
+  mit CI). Grundlage dafür, dass Ghostxx perspektivisch an sich selbst arbeiten kann.
 - Die nachts leeren 40er-Zeitfenster (05–10 Uhr) bleiben im Zeitplan.
 - Auswechselspieler gibt es nur bei staatlichen Meldungen und selbst erstellten
   Anmeldungen — geplante Events haben bewusst keine.
