@@ -46,6 +46,13 @@ async function antworte(text, { fetchImpl = fetch } = {}) {
       body: JSON.stringify({
         model: modell,
         stream: false,
+        // qwen3.5 hat einen "Denk-Modus", der vor der eigentlichen Antwort
+        // eine lange, unsichtbare Gedankenkette erzeugt und dabei die
+        // Wartezeit um ein Vielfaches aufblaeht (gemessen: >30s statt
+        // weniger Sekunden fuer einen kurzen Satz). Der Discord-Bot schaltet
+        // das in src/ollama.js schon ab (think: false) - hier unabhaengig
+        // nachgezogen, keine Codeaenderung dort.
+        think: false,
         messages: [
           { role: 'system', content: SYSTEM_PROMPT },
           { role: 'user', content: text },

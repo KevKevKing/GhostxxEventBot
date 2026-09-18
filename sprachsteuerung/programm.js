@@ -79,8 +79,9 @@ async function verarbeiteAeusserung(wavPfad, {
  * Echte Verdrahtung mit Mikrofon und Aufwachwort - NICHT automatisiert
  * getestet (echte Hardware). Siehe Umsetzungsplan, manuelle Abnahme.
  */
-// Schwellwert fuer "Aufwachwort erkannt" - Startwert, noch nicht am echten
-// Mikrofon gemessen (siehe Handpruefung/Task 8, "messen nicht vermuten").
+// Schwellwert fuer "Aufwachwort erkannt" - am echten Mikrofon gemessen
+// (Handpruefung 2026-09-18): echtes "Hey Jarvis" schlaegt zuverlaessig auf
+// 0.8-0.99 aus, Hintergrund/andere Woerter blieben meist unter 0.5.
 const AUFWACHWORT_SCHWELLE = 0.5;
 
 async function starteProgramm() {
@@ -101,6 +102,7 @@ async function starteProgramm() {
   const FRAME_LAENGE = 512;
   const recorder = new PvRecorder(FRAME_LAENGE, -1);
   recorder.start();
+  console.log('Mikrofon:', recorder.getSelectedDevice());
   console.log('Sprachsteuerung laeuft. Sag "Hey Jarvis" zum Starten.');
 
   let inAufnahme = false;

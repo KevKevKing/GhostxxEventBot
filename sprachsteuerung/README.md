@@ -20,8 +20,9 @@ Vorhaben. "Hey Jarvis" kam der Sache am naechsten.
    Modell (`ggml-base.bin` von huggingface.co/ggerganov/whisper.cpp) in
    einen Ordner `werkzeuge/` legen.
 3. `Piper` fuer Windows herunterladen (github.com/rhasspy/piper/releases)
-   plus eine deutsche Stimme (`de_DE-thorsten-medium`, ebenfalls von den
-   Piper-Releases) in denselben `werkzeuge/`-Ordner legen.
+   plus die Stimme `de_DE-karlsson-low` (von huggingface.co/rhasspy/
+   piper-voices, per Hoerprobe mit Kevin ausgewaehlt) in denselben
+   `werkzeuge/`-Ordner legen.
 4. Die drei openWakeWord-Modelldateien (`melspectrogram.onnx`,
    `embedding_model.onnx`, `hey_jarvis.onnx`) nach
    `werkzeuge/openwakeword/` legen - Quellen: `melspectrogram.onnx` und
