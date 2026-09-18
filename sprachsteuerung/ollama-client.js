@@ -52,17 +52,17 @@ async function antworte(text, { fetchImpl = fetch } = {}) {
         ],
       }),
     });
+
+    if (!res.ok) return { ok: false, grund: 'nicht_erreichbar' };
+
+    const daten = await res.json();
+    const antwortText = String(daten.message?.content || '').trim();
+    if (!antwortText) return { ok: false, grund: 'leer' };
+
+    return { ok: true, text: antwortText };
   } catch {
     return { ok: false, grund: 'nicht_erreichbar' };
   }
-
-  if (!res.ok) return { ok: false, grund: 'nicht_erreichbar' };
-
-  const daten = await res.json();
-  const antwortText = String(daten.message?.content || '').trim();
-  if (!antwortText) return { ok: false, grund: 'leer' };
-
-  return { ok: true, text: antwortText };
 }
 
 module.exports = { antworte, pickModel };

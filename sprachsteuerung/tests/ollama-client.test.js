@@ -64,5 +64,17 @@ section('pickModel: waehlt nach Grafikkarten-Auslastung');
   check('nicht ok bei leerer Antwort', leerErgebnis.ok === false);
   equal('Grund ist leer', leerErgebnis.grund, 'leer');
 
+  section('antworte: kaputtes JSON vom Modell');
+  const kaputterJSON = async (url) => {
+    if (String(url).includes('/api/ps')) return { ok: true, json: async () => ({ models: [] }) };
+    return {
+      ok: true,
+      json: async () => { throw new Error('SyntaxError: invalid JSON'); },
+    };
+  };
+  const jsonErgebnis = await antworte('Test', { fetchImpl: kaputterJSON });
+  check('nicht ok bei kaputtem JSON', jsonErgebnis.ok === false);
+  equal('Grund ist nicht_erreichbar', jsonErgebnis.grund, 'nicht_erreichbar');
+
   finish();
 })();
