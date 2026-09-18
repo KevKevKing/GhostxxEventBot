@@ -507,6 +507,20 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
       ? await leseZusammenfassung(klonPfad)
       : await leseZusammenfassungStandard(klonPfad);
 
+    // Gemessen bei einem echten End-zu-Ende-Testlauf (Kevin, 17.09.): die
+    // Aufgaben-Datei wird oben von starteSession selbst geschrieben, aber nie
+    // zu git hinzugefuegt und nie geloescht. Ohne diesen Schritt taucht sie in
+    // der "uncommittete Aenderungen"-Pruefung weiter unten (`git status
+    // --porcelain` im Klon) IMMER als `?? SELBSTVERBESSERUNG_AUFGABE.md` auf -
+    // unabhaengig davon, ob die Session ueberhaupt etwas geaendert hat. In
+    // einem gemessenen Lauf hat die Session korrekt "nichts geaendert, nichts
+    // committet" erkannt, starteSession aber trotzdem faelschlich "Aenderungen
+    // wurden verworfen" gemeldet, weil nur die eigene Aufgaben-Datei brach lag.
+    // `{ force: true }` analog zu leseZusammenfassungStandard oben: loescht
+    // still, wenn die Datei schon fehlt (z.B. weil die Session sie selbst
+    // geloescht hat).
+    await fs.rm(path.join(klonPfad, 'SELBSTVERBESSERUNG_AUFGABE.md'), { force: true });
+
     // Der ernsteste denkbare Fehlerfall, deshalb ganz vorn - noch vor der
     // Frage, ob die Session ueberhaupt erfolgreich war. Auch eine
     // abgebrochene oder abgelaufene Session kann vorher am echten Checkout

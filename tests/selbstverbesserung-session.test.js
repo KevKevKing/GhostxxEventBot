@@ -302,6 +302,52 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
     ergebnisOffen.fehler,
   );
 
+  section('Nur die eigene Aufgaben-Datei uebrig -> zaehlt nicht als "verworfen"');
+  // Gemessen (Kevin, zweiter End-zu-Ende-Testlauf): die Session hat nichts
+  // geaendert und laut eigener Zusammenfassung "nichts geaendert, nichts
+  // committet" - aber SELBSTVERBESSERUNG_AUFGABE.md, von starteSession selbst
+  // in den Klon geschrieben, lag noch da. `git status --porcelain` zeigte
+  // deshalb `?? SELBSTVERBESSERUNG_AUFGABE.md`, und starteSession meldete
+  // faelschlich die alarmierende "Aenderungen wurden verworfen"-Meldung statt
+  // der korrekten "keine Aenderung committet". Der Fake hier prueft den
+  // ECHTEN Dateisystem-Zustand (existsSync) statt einen festen String
+  // zurueckzugeben - nur so faellt der Test durch, wenn starteSession die
+  // Aufgaben-Datei nicht rechtzeitig loescht.
+  const fakeAusfuehrenNurAufgabe = async (cmd, args, options = {}) => {
+    if (istRemoteAbfrage(cmd, args)) {
+      return { code: 0, stdout: `${REMOTE_URL}\n`, stderr: '' };
+    }
+    if (cmd === 'git' && args[0] === 'diff') {
+      return { code: 0, stdout: '', stderr: '' };
+    }
+    if (cmd === 'git' && args[0] === 'status' && options.cwd) {
+      const aufgabenDateiPfad = path.join(options.cwd, 'SELBSTVERBESSERUNG_AUFGABE.md');
+      return {
+        code: 0,
+        stdout: fs.existsSync(aufgabenDateiPfad) ? '?? SELBSTVERBESSERUNG_AUFGABE.md\n' : '',
+        stderr: '',
+      };
+    }
+    if (cmd === 'claude') {
+      return { code: 0, stdout: 'fertig', stderr: '' };
+    }
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  const ergebnisNurAufgabe = await session.starteSession(
+    { titel: 'Nichts geaendert', belege: [] },
+    {
+      ausfuehren: fakeAusfuehrenNurAufgabe,
+      leseZusammenfassung: async () => 'Nichts geaendert, nichts committet.',
+    },
+  );
+  check('Als nicht ok gemeldet (nichts committet)', ergebnisNurAufgabe.ok === false);
+  equal(
+    'Meldung ist die korrekte "keine Aenderung", nicht die alarmierende "verworfen"-Meldung',
+    ergebnisNurAufgabe.fehler,
+    'Session hat keine Aenderung committet.',
+  );
+
   section('claude-Aufruf nutzt bypassPermissions, nicht acceptEdits');
   // Gemessen: acceptEdits erlaubt der CLI automatisches Dateischreiben, aber
   // kein automatisches Ausfuehren von Bash-Befehlen (git add/commit, npm
