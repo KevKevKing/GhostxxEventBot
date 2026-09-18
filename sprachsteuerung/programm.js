@@ -79,43 +79,42 @@ async function verarbeiteAeusserung(wavPfad, {
  * Echte Verdrahtung mit Mikrofon und Aufwachwort - NICHT automatisiert
  * getestet (echte Hardware). Siehe Umsetzungsplan, manuelle Abnahme.
  */
-function starteProgramm() {
+// Schwellwert fuer "Aufwachwort erkannt" - Startwert, noch nicht am echten
+// Mikrofon gemessen (siehe Handpruefung/Task 8, "messen nicht vermuten").
+const AUFWACHWORT_SCHWELLE = 0.5;
+
+async function starteProgramm() {
   // Erst hier (nicht am Dateianfang) importiert, damit die reine
   // Verarbeitungskette oben ohne installierte native Pakete testbar bleibt,
-  // falls @picovoice/* auf einem CI-Rechner ohne Audiogeraet nicht laedt.
-  const { Porcupine } = require('@picovoice/porcupine-node');
+  // falls @picovoice/pvrecorder-node oder onnxruntime-node auf einem
+  // CI-Rechner ohne Audiogeraet nicht laedt.
   const { PvRecorder } = require('@picovoice/pvrecorder-node');
+  const { ladeAufwachwort } = require('./aufwachwort');
   const fs = require('node:fs');
 
-  const porcupine = new Porcupine(
-    process.env.PICOVOICE_ACCESS_KEY,
-    [process.env.PORCUPINE_KEYWORD_PFAD],
-    [0.5],
-  );
+  const aufwachwort = await ladeAufwachwort({
+    modellPfad: process.env.AUFWACHWORT_MODELL_PFAD,
+    melspectrogrammPfad: process.env.AUFWACHWORT_MELSPEKTROGRAMM_PFAD,
+    embeddingPfad: process.env.AUFWACHWORT_EMBEDDING_PFAD,
+  });
 
-  const recorder = new PvRecorder(porcupine.frameLength, -1);
+  const FRAME_LAENGE = 512;
+  const recorder = new PvRecorder(FRAME_LAENGE, -1);
   recorder.start();
-  console.log('Sprachsteuerung laeuft. Sag "Ghost" zum Starten.');
+  console.log('Sprachsteuerung laeuft. Sag "Hey Jarvis" zum Starten.');
 
   let inAufnahme = false;
   let erkennung = null;
   let frames = [];
   let aufeinanderfolgendeFehler = 0;
 
-  // Sauberes Beenden: recorder/porcupine geben natives (Mikrofon-)Handle frei
-  // statt es beim Beenden des Prozesses offen zu lassen. Je in eigenem
-  // try/catch, falls eines der beiden schon freigegeben ist oder release()
-  // nicht unterstuetzt.
+  // Sauberes Beenden: recorder gibt natives (Mikrofon-)Handle frei statt es
+  // beim Beenden des Prozesses offen zu lassen.
   process.on('SIGINT', () => {
     try {
       recorder.release();
     } catch (fehler) {
       console.error('Fehler beim Freigeben des Recorders:', fehler);
-    }
-    try {
-      porcupine.release();
-    } catch (fehler) {
-      console.error('Fehler beim Freigeben von Porcupine:', fehler);
     }
     process.exit(0);
   });
@@ -126,15 +125,15 @@ function starteProgramm() {
       // Ein einzelner Fehler (z.B. recorder.read(), das laut pvrecorder
       // explizit rejecten kann, oder eine fehlende Umgebungsvariable
       // irgendwo in der Kette) darf diese Dauerschleife nicht beenden -
-      // sonst reagiert "Ghost" danach ueberhaupt nicht mehr, ohne dass es
-      // auffaellt.
+      // sonst reagiert "Hey Jarvis" danach ueberhaupt nicht mehr, ohne dass
+      // es auffaellt.
       try {
         const frame = await recorder.read();
         aufeinanderfolgendeFehler = 0;
 
         if (!inAufnahme) {
-          const treffer = porcupine.process(frame);
-          if (treffer !== -1) {
+          const punktzahl = await aufwachwort.verarbeite(frame);
+          if (punktzahl >= AUFWACHWORT_SCHWELLE) {
             console.log('Aufwachwort erkannt, ich höre zu...');
             inAufnahme = true;
             erkennung = erstelleStilleErkennung();
@@ -189,7 +188,13 @@ function schreibeWav(pfad, pcmDaten, sampleRate) {
 }
 
 if (require.main === module) {
-  starteProgramm();
+  // starteProgramm() ist jetzt async (laedt die ONNX-Modelle vor dem Start) -
+  // ein Fehler dabei (z.B. fehlender Modellpfad) muss als klare Meldung
+  // enden statt als unhandled rejection.
+  starteProgramm().catch((fehler) => {
+    console.error('Sprachsteuerung konnte nicht gestartet werden:', fehler);
+    process.exit(1);
+  });
 }
 
 module.exports = { starteProgramm, verarbeiteAeusserung };

@@ -8,8 +8,8 @@
     "test": "node tests/run.js"
   },
   "dependencies": {
-    "@picovoice/porcupine-node": "^3.0.0",
     "@picovoice/pvrecorder-node": "^1.2.0",
-    "dotenv": "^17.4.2"
+    "dotenv": "^17.4.2",
+    "onnxruntime-node": "^1.30.0"
   }
 }
