@@ -35,11 +35,24 @@ async function transkribiere(wavPfad, { ausfuehren = echtAusfuehren, dateiLesen 
     return { ok: false, grund: 'fehlgeschlagen' };
   }
 
+  const txtPfad = `${ausgabeOhneEndung}.txt`;
   let inhalt;
   try {
-    inhalt = (await dateiLesen(`${ausgabeOhneEndung}.txt`)).toString('utf8').trim();
+    inhalt = (await dateiLesen(txtPfad)).toString('utf8').trim();
   } catch {
     return { ok: false, grund: 'fehlgeschlagen' };
+  } finally {
+    // whisper.cpp legt diese .txt-Datei bei --output-txt IMMER an - anders
+    // als die WAV-Aufnahme selbst wird sie nirgendwo sonst aufgeraeumt und
+    // sammelt sich bei einem Dauerprogramm unbegrenzt an. {force:true} und
+    // eigenes try/catch, damit ein Fehlschlagen beim Aufraeumen (z.B. Datei
+    // gerade gesperrt) nicht das eigentliche Ergebnis von transkribiere()
+    // veraendert - unabhaengig davon, ob das Lesen oben ok war oder nicht.
+    try {
+      await fs.promises.rm(txtPfad, { force: true });
+    } catch {
+      // bewusst ignoriert - Aufraeumen ist best effort
+    }
   }
 
   if (!inhalt) return { ok: false, grund: 'kein_text' };

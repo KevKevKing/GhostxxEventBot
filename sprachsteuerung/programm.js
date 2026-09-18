@@ -61,10 +61,15 @@ async function verarbeiteAeusserung(wavPfad, {
       return { ok: false, gesagt: '' };
     }
     return { ok: true, gesagt: antwort.text };
-  } catch {
+  } catch (fehler) {
     // Jeder synchrone oder asynchrone Wurf aus transkribieren/antworten/
     // sprechen landet hier - das Dauerprogramm muss danach sofort wieder
     // auf das naechste Aufwachwort warten koennen statt stehenzubleiben.
+    // console.error hier ist wichtig: ohne Log-Zeile waere ein echter Bug in
+    // der Kette nur noch als gesprochener Satz erkennbar - bei einem
+    // Programm, dessen ganze Schnittstelle Audio ist, die schlechteste
+    // denkbare Debugging-Situation.
+    console.error('Fehler in verarbeiteAeusserung:', fehler);
     await sprechenOhneWurf(sprechen, textFuer('unerwarteter_fehler'));
     return { ok: false, gesagt: textFuer('unerwarteter_fehler') };
   }
@@ -95,6 +100,25 @@ function starteProgramm() {
   let inAufnahme = false;
   let erkennung = null;
   let frames = [];
+  let aufeinanderfolgendeFehler = 0;
+
+  // Sauberes Beenden: recorder/porcupine geben natives (Mikrofon-)Handle frei
+  // statt es beim Beenden des Prozesses offen zu lassen. Je in eigenem
+  // try/catch, falls eines der beiden schon freigegeben ist oder release()
+  // nicht unterstuetzt.
+  process.on('SIGINT', () => {
+    try {
+      recorder.release();
+    } catch (fehler) {
+      console.error('Fehler beim Freigeben des Recorders:', fehler);
+    }
+    try {
+      porcupine.release();
+    } catch (fehler) {
+      console.error('Fehler beim Freigeben von Porcupine:', fehler);
+    }
+    process.exit(0);
+  });
 
   (async () => {
     // eslint-disable-next-line no-constant-condition
@@ -106,6 +130,7 @@ function starteProgramm() {
       // auffaellt.
       try {
         const frame = await recorder.read();
+        aufeinanderfolgendeFehler = 0;
 
         if (!inAufnahme) {
           const treffer = porcupine.process(frame);
@@ -118,7 +143,7 @@ function starteProgramm() {
           continue;
         }
 
-        frames.push(Buffer.from(frame.buffer));
+        frames.push(Buffer.from(frame.buffer, frame.byteOffset, frame.byteLength));
         const fertig = erkennung.framePruefen(frame);
 
         if (fertig) {
@@ -131,6 +156,13 @@ function starteProgramm() {
       } catch (fehler) {
         console.error('Fehler in der Aufnahme-Schleife, mache weiter:', fehler);
         inAufnahme = false;
+        aufeinanderfolgendeFehler += 1;
+        // Ansteigender Backoff mit Obergrenze: ein dauerhaft fehlschlagendes
+        // recorder.read() (z.B. abgestecktes Mikrofon) soll nicht in einer
+        // engen Schleife bei jedem Durchlauf sofort erneut versuchen und
+        // dabei die CPU/das Log fluten - auf einem Rechner, der sich GPU/CPU
+        // mit GTA teilt.
+        await new Promise((r) => setTimeout(r, Math.min(5000, 100 * aufeinanderfolgendeFehler)));
       }
     }
   })();
