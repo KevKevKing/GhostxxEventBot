@@ -38,6 +38,24 @@ section('erstelleStilleErkennung: lauter Frame zwischendrin setzt zurueck');
   check('jetzt fertig', erkennung.framePruefen(stillerFrame()) === true);
 })();
 
+section('erstelleStilleErkennung: leise Frames vor der ersten echten Sprache zaehlen nicht als Stille-Ende');
+(() => {
+  const erkennung = erstelleStilleErkennung({ schwelle: 500, stilleFramesZumBeenden: 3, maxFrames: 100 });
+
+  // Kurze natuerliche Pause direkt nach dem Aufwachwort, bevor der Nutzer
+  // ueberhaupt zu reden angefangen hat - darf die Aufnahme NICHT beenden.
+  check('leiser Frame vor Sprache: nicht fertig', erkennung.framePruefen(stillerFrame()) === false);
+  check('noch ein leiser Frame: immer noch nicht fertig', erkennung.framePruefen(stillerFrame()) === false);
+  check('noch ein leiser Frame: immer noch nicht fertig', erkennung.framePruefen(stillerFrame()) === false);
+  check('vierter leiser Frame: immer noch nicht fertig (kein Wort gehoert)', erkennung.framePruefen(stillerFrame()) === false);
+
+  // Jetzt faengt die echte Sprache an.
+  check('lauter Frame: nicht fertig', erkennung.framePruefen(lauterFrame()) === false);
+  check('danach 1 leiser Frame: noch nicht fertig', erkennung.framePruefen(stillerFrame()) === false);
+  check('danach 2 leise Frames: noch nicht fertig', erkennung.framePruefen(stillerFrame()) === false);
+  check('danach 3 leise Frames: jetzt fertig', erkennung.framePruefen(stillerFrame()) === true);
+})();
+
 section('erstelleStilleErkennung: hartes Limit greift trotz Lautstaerke');
 (() => {
   const erkennung = erstelleStilleErkennung({ schwelle: 500, stilleFramesZumBeenden: 1000, maxFrames: 5 });

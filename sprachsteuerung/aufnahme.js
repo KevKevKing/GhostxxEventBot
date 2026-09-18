@@ -21,6 +21,13 @@ function erstelleStilleErkennung({ schwelle = 500, stilleFramesZumBeenden = 12, 
   let stilleZaehler = 0;
   let frameZaehler = 0;
   let fertig = false;
+  // Ohne das wuerde eine kurze natuerliche Pause direkt nach dem Aufwachwort
+  // (bevor der Satz ueberhaupt angefangen hat) schon als "fertig, war
+  // still" gewertet - die Aufnahme endet dann, bevor der Nutzer ueberhaupt
+  // zu reden angefangen hat (gemessen in der Handpruefung/Task 8: "komme
+  // nicht dazu zu reden"). Stille zaehlt daher erst, NACHDEM mindestens
+  // einmal ein lauter Frame gesehen wurde.
+  let spracheGehoert = false;
 
   function framePruefen(frame) {
     if (fertig) return true;
@@ -29,8 +36,9 @@ function erstelleStilleErkennung({ schwelle = 500, stilleFramesZumBeenden = 12, 
     const lautstaerke = berechneLautstaerke(frame);
 
     if (lautstaerke < schwelle) {
-      stilleZaehler += 1;
+      if (spracheGehoert) stilleZaehler += 1;
     } else {
+      spracheGehoert = true;
       stilleZaehler = 0;
     }
 

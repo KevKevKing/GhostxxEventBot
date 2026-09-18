@@ -4,7 +4,7 @@ const os = require('node:os');
 const { antworte: antwortenEcht } = require('./ollama-client');
 const { transkribiere: transkribierenEcht } = require('./hoere-zu');
 const { sprich: sprechenEcht } = require('./sprich');
-const { erstelleStilleErkennung } = require('./aufnahme');
+const { erstelleStilleErkennung, berechneLautstaerke } = require('./aufnahme');
 const { textFuer } = require('./feste-antworten');
 
 // Verbindet die einzelnen Schritte zur kompletten Kette: Aufnahme (WAV) ->
@@ -39,23 +39,33 @@ async function verarbeiteAeusserung(wavPfad, {
   ollamaTimeoutMs = OLLAMA_TIMEOUT_MS,
 } = {}) {
   try {
+    console.log('  -> verstehe... (t0)');
+    const t0 = Date.now();
     const gehoert = await transkribieren(wavPfad);
+    console.log(`  -> verstehen dauerte ${Date.now() - t0}ms`);
     if (!gehoert || !gehoert.ok) {
       const grund = gehoert && gehoert.grund;
+      console.log(`  -> nichts verstanden (${grund || 'unbekannt'})`);
       await sprechenOhneWurf(sprechen, textFuer(grund));
       return { ok: false, gesagt: textFuer(grund) };
     }
 
+    console.log(`  -> verstanden: "${gehoert.text}"`);
+    console.log('  -> denke nach...');
+    const t1 = Date.now();
     const antwort = await mitTimeout(
       (async () => antworten(gehoert.text))(),
       ollamaTimeoutMs,
     );
+    console.log(`  -> denken dauerte ${Date.now() - t1}ms`);
     if (!antwort || !antwort.ok) {
       const grund = antwort && antwort.grund;
+      console.log(`  -> keine Antwort (${grund || 'unbekannt'})`);
       await sprechenOhneWurf(sprechen, textFuer(grund));
       return { ok: false, gesagt: textFuer(grund) };
     }
 
+    console.log(`  -> antworte: "${antwort.text}"`);
     const gesprochen = await sprechenOhneWurf(sprechen, antwort.text);
     if (!gesprochen || !gesprochen.ok) {
       return { ok: false, gesagt: '' };
@@ -79,10 +89,31 @@ async function verarbeiteAeusserung(wavPfad, {
  * Echte Verdrahtung mit Mikrofon und Aufwachwort - NICHT automatisiert
  * getestet (echte Hardware). Siehe Umsetzungsplan, manuelle Abnahme.
  */
-// Schwellwert fuer "Aufwachwort erkannt" - am echten Mikrofon gemessen
-// (Handpruefung 2026-09-18): echtes "Hey Jarvis" schlaegt zuverlaessig auf
-// 0.8-0.99 aus, Hintergrund/andere Woerter blieben meist unter 0.5.
-const AUFWACHWORT_SCHWELLE = 0.5;
+// Mindestanzahl Frames nach dem Aufwachwort, bevor ueberhaupt transkribiert
+// wird - eine echte Aeusserung braucht neben den stilleFramesZumBeenden
+// (12, siehe aufnahme.js) noch ein paar echte Sprach-Frames davor. Ohne
+// diese Grenze wertet der Code eine sofortige Stille (z.B. Nachhall von
+// Ghosts eigener Stimme durch den Lautsprecher, ohne Kopfhoerer) als echte,
+// aber leere Aeusserung - Whisper "erfindet" dann Text daraus, Ollama
+// antwortet normal darauf, die Antwort wird selbst wieder gehoert usw.
+// (gemessen in der Handpruefung/Task 8: 12-Frame-"Aeusserungen" in einer
+// sich selbst antreibenden Kette). Startwert, noch nicht feinjustiert.
+const MINDEST_FRAMES = 20;
+
+// Durchschnittliche Lautstaerke (RMS, wie aufnahme.js's schwelle) ueber die
+// GESAMTE Aufnahme, die eine echte Aeusserung mindestens haben muss - fischt
+// vor allem den Fall raus, in dem eine Aufnahme knapp ueber MINDEST_FRAMES
+// kommt, aber ueberwiegend aus der erzwungenen Stille am Ende besteht
+// (gemessen: solche Aufnahmen liess Whisper trotzdem nicht leer, sondern hat
+// Text erfunden). Trennt NICHT laute Klopf-/Stoss-Geraeusche von echter
+// Sprache - beide sind laut. Startwert, noch nicht feinjustiert.
+const MINDEST_LAUTSTAERKE = 300;
+
+// Ruhephase nach dem Sprechen, bevor wieder auf das Aufwachwort gehoert
+// wird - Raumhall von Ghosts eigener Stimme (ohne Kopfhoerer) klingt sonst
+// noch kurz nach und kann sofort wieder als Sprache gewertet werden.
+// Startwert, noch nicht am echten Raum gemessen.
+const RUHEPHASE_NACH_ANTWORT_MS = 2000;
 
 async function starteProgramm() {
   // Erst hier (nicht am Dateianfang) importiert, damit die reine
@@ -94,9 +125,7 @@ async function starteProgramm() {
   const fs = require('node:fs');
 
   const aufwachwort = await ladeAufwachwort({
-    modellPfad: process.env.AUFWACHWORT_MODELL_PFAD,
-    melspectrogrammPfad: process.env.AUFWACHWORT_MELSPEKTROGRAMM_PFAD,
-    embeddingPfad: process.env.AUFWACHWORT_EMBEDDING_PFAD,
+    ordner: process.env.AUFWACHWORT_MODELL_ORDNER,
   });
 
   const FRAME_LAENGE = 512;
@@ -110,11 +139,12 @@ async function starteProgramm() {
   const recorder = new PvRecorder(FRAME_LAENGE, geraeteIndex);
   recorder.start();
   console.log('Mikrofon:', recorder.getSelectedDevice());
-  console.log('Sprachsteuerung laeuft. Sag "Hey Jarvis" zum Starten.');
+  console.log('Sprachsteuerung laeuft. Sag "Ghost" zum Starten.');
 
   let inAufnahme = false;
   let erkennung = null;
   let frames = [];
+  let lautstaerkeSumme = 0;
   let aufeinanderfolgendeFehler = 0;
 
   // Sauberes Beenden: recorder gibt natives (Mikrofon-)Handle frei statt es
@@ -128,55 +158,96 @@ async function starteProgramm() {
     process.exit(0);
   });
 
+  // Waehrend Ghost per Lautsprecher redet, wird recorder.read() nicht
+  // aufgerufen - das native Mikrofon-Ringpuffer sammelt aber trotzdem
+  // weiter, und ohne Kopfhoerer faengt das Mikrofon dabei Ghosts eigene
+  // Stimme ueber die Lautsprecher auf (plus Raumhall danach). Rueckstand
+  // durch Lesen+Verwerfen abbauen UND den Aufwachwort-Stream neu erstellen,
+  // damit garantiert kein alter Zustand aus der Zeit vor dem Sprechen noch
+  // mit hineinspielt.
+  async function ruheUndNeuLaden() {
+    const ruhephaseEnde = Date.now() + RUHEPHASE_NACH_ANTWORT_MS;
+    while (Date.now() < ruhephaseEnde) {
+      await recorder.read().catch(() => {});
+    }
+    aufwachwort.neuStarten();
+  }
+
   (async () => {
     // eslint-disable-next-line no-constant-condition
     while (true) {
       // Ein einzelner Fehler (z.B. recorder.read(), das laut pvrecorder
       // explizit rejecten kann, oder eine fehlende Umgebungsvariable
       // irgendwo in der Kette) darf diese Dauerschleife nicht beenden -
-      // sonst reagiert "Hey Jarvis" danach ueberhaupt nicht mehr, ohne dass
+      // sonst reagiert "Ghost" danach ueberhaupt nicht mehr, ohne dass
       // es auffaellt.
       try {
         const frame = await recorder.read();
         aufeinanderfolgendeFehler = 0;
 
         if (!inAufnahme) {
-          const punktzahl = await aufwachwort.verarbeite(frame);
-          if (punktzahl >= AUFWACHWORT_SCHWELLE) {
-            console.log('Aufwachwort erkannt, ich höre zu...');
+          const erkannt = aufwachwort.verarbeite(frame);
+          if (erkannt) {
+            console.log('\n"Ghost" erkannt - ich höre zu...');
+            // Eine sofortige gesprochene "Ja?"-Rueckmeldung wurde hier
+            // ausprobiert (wie der Signalton bei Alexa/Google), aber wieder
+            // entfernt: da man erfahrungsgemaess nicht auf sie wartet und
+            // einfach weiterredet, sammelte sich waehrend ihrer Wiedergabe
+            // ein Mikrofon-Rueckstand an, der den Anfang der echten Aufnahme
+            // verschluckte oder verfaelschte (gemessen in der
+            // Handpruefung/Task 8).
             inAufnahme = true;
             erkennung = erstelleStilleErkennung();
+            // Kein Vorpuffer mehr (frueher hier ausprobiert): der sollte den
+            // Satzanfang direkt nach "Ghost" retten, hat aber
+            // stattdessen den Wortschwanz von "...arvis" mit in die Aufnahme
+            // gezogen - Whisper hat daraus ein falsches Fuellwort erfunden
+            // ("Der Javis, wie ist...", "es wie geht's dir?"). Das eigentliche
+            // Problem (keine Zeit zum Reden) loest stattdessen aufnahme.js's
+            // Regel, dass Stille erst nach der ersten echten Sprache zaehlt.
             frames = [];
+            lautstaerkeSumme = 0;
+            continue;
           }
           continue;
         }
 
         frames.push(Buffer.from(frame.buffer, frame.byteOffset, frame.byteLength));
+        lautstaerkeSumme += berechneLautstaerke(frame);
         const fertig = erkennung.framePruefen(frame);
 
         if (fertig) {
           inAufnahme = false;
+          const durchschnittsLautstaerke = lautstaerkeSumme / frames.length;
+
+          // Zu kurz oder im Schnitt zu leise fuer eine echte Aeusserung
+          // (siehe MINDEST_FRAMES/MINDEST_LAUTSTAERKE oben) - vermutlich ein
+          // Fehlalarm ohne echte Sprache danach (z.B. kurzes Klopfen am
+          // Mikrofon, das das Aufwachwort ausgeloest hat, aber danach nur
+          // Stille/Rauschen folgt). Bewusst NICHTS antworten (auch keine
+          // feste Fehlerantwort, Whisper wuerde sonst oft Text aus dem
+          // Rauschen erfinden statt "nichts verstanden" zu sagen) und still
+          // weiterhoeren - jede gesprochene Antwort koennte selbst wieder
+          // als Aufwachwort gewertet werden und die Kette fortsetzen.
+          console.log(`  -> Aufnahme: ${frames.length} Frames (~${(frames.length * 32).toFixed(0)}ms), Lautstaerke ${durchschnittsLautstaerke.toFixed(0)}`);
+          if (frames.length < MINDEST_FRAMES || durchschnittsLautstaerke < MINDEST_LAUTSTAERKE) {
+            console.log('  -> zu kurz oder zu leise, war wohl nichts - ich höre weiter zu.');
+            frames = [];
+            // Die sofortige "Ja?"-Rueckmeldung wurde bereits gesprochen,
+            // bevor klar war, dass diese Aufnahme zu kurz/leise ist - ohne
+            // die gleiche Ruhephase+Neuladen wie unten wuerde ihr eigener
+            // Nachhall sich sofort wieder selbst ausloesen (gemessen: genau
+            // das ist passiert, "Ja?" in einer Dauerschleife).
+            await ruheUndNeuLaden();
+            continue;
+          }
+
           const wavPfad = path.join(os.tmpdir(), `ghostxx-sprachsteuerung-${Date.now()}.wav`);
           schreibeWav(wavPfad, Buffer.concat(frames), recorder.sampleRate);
           await verarbeiteAeusserung(wavPfad);
           fs.rm(wavPfad, { force: true }, () => {});
-
-          // Waehrend Ghost per Lautsprecher antwortet, wird recorder.read()
-          // hier nicht aufgerufen - das native Mikrofon-Ringpuffer sammelt
-          // aber trotzdem weiter. Ohne Kopfhoerer faengt das Mikrofon dabei
-          // Ghosts eigene Stimme ueber die Lautsprecher auf. Ohne Reset wird
-          // dieser aufgestaute Rueckstand beim naechsten read() als ein
-          // Schwall verarbeitet und loest das Aufwachwort mehrfach
-          // hintereinander erneut aus, obwohl niemand gesprochen hat
-          // (gemessen in der Handpruefung/Task 8: 3-4 Ausloesungen in
-          // Folge direkt nach einer Antwort). Neustart des Recorders
-          // verwirft den angesammelten Rueckstand.
-          try {
-            recorder.stop();
-            recorder.start();
-          } catch (fehler) {
-            console.error('Fehler beim Zuruecksetzen des Mikrofonpuffers:', fehler);
-          }
+          await ruheUndNeuLaden();
+          console.log('Ich höre wieder zu (sag "Ghost").');
         }
       } catch (fehler) {
         console.error('Fehler in der Aufnahme-Schleife, mache weiter:', fehler);
