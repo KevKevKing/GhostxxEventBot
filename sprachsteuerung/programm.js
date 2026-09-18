@@ -21,26 +21,53 @@ function mitTimeout(versprechen, timeoutMs) {
   ]);
 }
 
+// Spricht eine feste Antwort, faengt aber selbst einen Wurf dabei ab - ein
+// zweiter Fehler beim Melden des ersten Fehlers darf die Kette nicht
+// zusaetzlich zum Absturz bringen.
+async function sprechenOhneWurf(sprechen, text) {
+  try {
+    return await sprechen(text);
+  } catch {
+    return { ok: false };
+  }
+}
+
 async function verarbeiteAeusserung(wavPfad, {
   transkribieren = transkribierenEcht,
   antworten = antwortenEcht,
   sprechen = sprechenEcht,
   ollamaTimeoutMs = OLLAMA_TIMEOUT_MS,
 } = {}) {
-  const gehoert = await transkribieren(wavPfad);
-  if (!gehoert.ok) {
-    await sprechen(textFuer(gehoert.grund));
-    return { ok: false, gesagt: textFuer(gehoert.grund) };
-  }
+  try {
+    const gehoert = await transkribieren(wavPfad);
+    if (!gehoert || !gehoert.ok) {
+      const grund = gehoert && gehoert.grund;
+      await sprechenOhneWurf(sprechen, textFuer(grund));
+      return { ok: false, gesagt: textFuer(grund) };
+    }
 
-  const antwort = await mitTimeout(antworten(gehoert.text), ollamaTimeoutMs);
-  if (!antwort.ok) {
-    await sprechen(textFuer(antwort.grund));
-    return { ok: false, gesagt: textFuer(antwort.grund) };
-  }
+    const antwort = await mitTimeout(
+      (async () => antworten(gehoert.text))(),
+      ollamaTimeoutMs,
+    );
+    if (!antwort || !antwort.ok) {
+      const grund = antwort && antwort.grund;
+      await sprechenOhneWurf(sprechen, textFuer(grund));
+      return { ok: false, gesagt: textFuer(grund) };
+    }
 
-  await sprechen(antwort.text);
-  return { ok: true, gesagt: antwort.text };
+    const gesprochen = await sprechenOhneWurf(sprechen, antwort.text);
+    if (!gesprochen || !gesprochen.ok) {
+      return { ok: false, gesagt: '' };
+    }
+    return { ok: true, gesagt: antwort.text };
+  } catch {
+    // Jeder synchrone oder asynchrone Wurf aus transkribieren/antworten/
+    // sprechen landet hier - das Dauerprogramm muss danach sofort wieder
+    // auf das naechste Aufwachwort warten koennen statt stehenzubleiben.
+    await sprechenOhneWurf(sprechen, textFuer('unerwarteter_fehler'));
+    return { ok: false, gesagt: textFuer('unerwarteter_fehler') };
+  }
 }
 
 /**
@@ -72,28 +99,38 @@ function starteProgramm() {
   (async () => {
     // eslint-disable-next-line no-constant-condition
     while (true) {
-      const frame = await recorder.read();
+      // Ein einzelner Fehler (z.B. recorder.read(), das laut pvrecorder
+      // explizit rejecten kann, oder eine fehlende Umgebungsvariable
+      // irgendwo in der Kette) darf diese Dauerschleife nicht beenden -
+      // sonst reagiert "Ghost" danach ueberhaupt nicht mehr, ohne dass es
+      // auffaellt.
+      try {
+        const frame = await recorder.read();
 
-      if (!inAufnahme) {
-        const treffer = porcupine.process(frame);
-        if (treffer !== -1) {
-          console.log('Aufwachwort erkannt, ich höre zu...');
-          inAufnahme = true;
-          erkennung = erstelleStilleErkennung();
-          frames = [];
+        if (!inAufnahme) {
+          const treffer = porcupine.process(frame);
+          if (treffer !== -1) {
+            console.log('Aufwachwort erkannt, ich höre zu...');
+            inAufnahme = true;
+            erkennung = erstelleStilleErkennung();
+            frames = [];
+          }
+          continue;
         }
-        continue;
-      }
 
-      frames.push(Buffer.from(frame.buffer));
-      const fertig = erkennung.framePruefen(frame);
+        frames.push(Buffer.from(frame.buffer));
+        const fertig = erkennung.framePruefen(frame);
 
-      if (fertig) {
+        if (fertig) {
+          inAufnahme = false;
+          const wavPfad = path.join(os.tmpdir(), `ghostxx-sprachsteuerung-${Date.now()}.wav`);
+          schreibeWav(wavPfad, Buffer.concat(frames), recorder.sampleRate);
+          await verarbeiteAeusserung(wavPfad);
+          fs.rm(wavPfad, { force: true }, () => {});
+        }
+      } catch (fehler) {
+        console.error('Fehler in der Aufnahme-Schleife, mache weiter:', fehler);
         inAufnahme = false;
-        const wavPfad = path.join(os.tmpdir(), `ghostxx-sprachsteuerung-${Date.now()}.wav`);
-        schreibeWav(wavPfad, Buffer.concat(frames), recorder.sampleRate);
-        await verarbeiteAeusserung(wavPfad);
-        fs.rm(wavPfad, { force: true }, () => {});
       }
     }
   })();

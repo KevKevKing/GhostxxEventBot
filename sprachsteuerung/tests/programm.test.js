@@ -53,5 +53,49 @@ section('Erfolgreicher Durchlauf');
   check('nicht ok bei Zeitueberschreitung', ergebnis4.ok === false);
   equal('feste Timeout-Antwort gesprochen', gesprochen4[0], require('../feste-antworten').textFuer('timeout_ollama'));
 
+  section('transkribieren wirft synchron -> kein Absturz');
+  const ergebnis5 = await verarbeiteAeusserung('C:/temp/aufnahme.wav', {
+    transkribieren: () => { throw new Error('kaputt'); },
+    antworten: async () => ({ ok: true, text: 'x' }),
+    sprechen: async () => ({ ok: true }),
+  });
+  check('nicht ok statt Wurf', ergebnis5.ok === false);
+  equal('feste Antwort fuer unerwarteter_fehler', ergebnis5.gesagt, require('../feste-antworten').textFuer('unerwarteter_fehler'));
+
+  section('antworten wirft synchron -> kein Absturz');
+  const ergebnis6 = await verarbeiteAeusserung('C:/temp/aufnahme.wav', {
+    transkribieren: async () => ({ ok: true, text: 'Test' }),
+    antworten: () => { throw new Error('kaputt'); },
+    sprechen: async () => ({ ok: true }),
+  });
+  check('nicht ok statt Wurf', ergebnis6.ok === false);
+  equal('feste Antwort fuer unerwarteter_fehler', ergebnis6.gesagt, require('../feste-antworten').textFuer('unerwarteter_fehler'));
+
+  section('sprechen wirft synchron -> kein Absturz, ehrliches ok:false');
+  const ergebnis7 = await verarbeiteAeusserung('C:/temp/aufnahme.wav', {
+    transkribieren: async () => ({ ok: true, text: 'Test' }),
+    antworten: async () => ({ ok: true, text: 'Antwort' }),
+    sprechen: () => { throw new Error('kaputt'); },
+  });
+  check('nicht ok statt Wurf', ergebnis7.ok === false);
+  equal('gesagt ist leer statt der Antwort', ergebnis7.gesagt, '');
+
+  section('transkribieren liefert undefined -> kein Absturz beim Zugriff auf .ok');
+  const ergebnis8 = await verarbeiteAeusserung('C:/temp/aufnahme.wav', {
+    transkribieren: async () => undefined,
+    antworten: async () => ({ ok: true, text: 'x' }),
+    sprechen: async () => ({ ok: true }),
+  });
+  check('nicht ok statt Absturz', ergebnis8.ok === false);
+
+  section('sprechen scheitert bei sonst erfolgreicher Kette -> ehrliches ok:false');
+  const ergebnis9 = await verarbeiteAeusserung('C:/temp/aufnahme.wav', {
+    transkribieren: async () => ({ ok: true, text: 'Test' }),
+    antworten: async () => ({ ok: true, text: 'Antwort' }),
+    sprechen: async () => ({ ok: false, grund: 'piper_fehlgeschlagen' }),
+  });
+  check('nicht ok, obwohl Transkription und Antwort erfolgreich waren', ergebnis9.ok === false);
+  equal('gesagt ist leer statt der Antwort', ergebnis9.gesagt, '');
+
   finish();
 })();
