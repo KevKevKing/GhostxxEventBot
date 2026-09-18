@@ -13,7 +13,9 @@ const GPU_SCHWELLE = 0.6;
 const SYSTEM_PROMPT = 'Du bist Ghostxx, ein deutschsprachiger Assistent. '
   + 'Deine Antworten werden laut vorgelesen, deshalb: kurz (1-2 Saetze), '
   + 'keine Aufzaehlungen, keine Formatierung, keine Emojis, normal '
-  + 'gesprochene Sprache statt Schriftsprache.';
+  + 'gesprochene Sprache statt Schriftsprache. Sag deinen eigenen Namen '
+  + '"Ghostxx" oder "Ghost" nicht laut - die Sprachausgabe spricht das '
+  + 'englische Wort falsch aus, das klingt komisch.';
 
 async function pickModel({ fetchImpl = fetch } = {}) {
   const gross = process.env.OLLAMA_MODELL;

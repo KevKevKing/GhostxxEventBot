@@ -100,7 +100,14 @@ async function starteProgramm() {
   });
 
   const FRAME_LAENGE = 512;
-  const recorder = new PvRecorder(FRAME_LAENGE, -1);
+  // -1 = Windows-Standardgeraet. Kann ueber MIKROFON_GERAETE_INDEX auf ein
+  // bestimmtes Geraet festgelegt werden (siehe geraete-auflisten.js) - z.B.
+  // auf ein Geraet mit Rauschunterdrueckung statt einen Mix-Kanal, der auch
+  // Spiel-/Musik-/Discord-Ton mit aufnehmen kann.
+  const geraeteIndex = process.env.MIKROFON_GERAETE_INDEX
+    ? Number.parseInt(process.env.MIKROFON_GERAETE_INDEX, 10)
+    : -1;
+  const recorder = new PvRecorder(FRAME_LAENGE, geraeteIndex);
   recorder.start();
   console.log('Mikrofon:', recorder.getSelectedDevice());
   console.log('Sprachsteuerung laeuft. Sag "Hey Jarvis" zum Starten.');
@@ -153,6 +160,23 @@ async function starteProgramm() {
           schreibeWav(wavPfad, Buffer.concat(frames), recorder.sampleRate);
           await verarbeiteAeusserung(wavPfad);
           fs.rm(wavPfad, { force: true }, () => {});
+
+          // Waehrend Ghost per Lautsprecher antwortet, wird recorder.read()
+          // hier nicht aufgerufen - das native Mikrofon-Ringpuffer sammelt
+          // aber trotzdem weiter. Ohne Kopfhoerer faengt das Mikrofon dabei
+          // Ghosts eigene Stimme ueber die Lautsprecher auf. Ohne Reset wird
+          // dieser aufgestaute Rueckstand beim naechsten read() als ein
+          // Schwall verarbeitet und loest das Aufwachwort mehrfach
+          // hintereinander erneut aus, obwohl niemand gesprochen hat
+          // (gemessen in der Handpruefung/Task 8: 3-4 Ausloesungen in
+          // Folge direkt nach einer Antwort). Neustart des Recorders
+          // verwirft den angesammelten Rueckstand.
+          try {
+            recorder.stop();
+            recorder.start();
+          } catch (fehler) {
+            console.error('Fehler beim Zuruecksetzen des Mikrofonpuffers:', fehler);
+          }
         }
       } catch (fehler) {
         console.error('Fehler in der Aufnahme-Schleife, mache weiter:', fehler);
