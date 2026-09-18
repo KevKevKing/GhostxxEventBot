@@ -320,7 +320,7 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
     if (cmd === 'git' && args[0] === 'diff') {
       return { code: 0, stdout: '', stderr: '' };
     }
-    if (cmd === 'git' && args[0] === 'status' && options.cwd) {
+    if (cmd === 'git' && args[0] === 'status' && options.cwd && options.cwd.includes('ghostxx-')) {
       const aufgabenDateiPfad = path.join(options.cwd, 'SELBSTVERBESSERUNG_AUFGABE.md');
       return {
         code: 0,
@@ -345,6 +345,65 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
   equal(
     'Meldung ist die korrekte "keine Aenderung", nicht die alarmierende "verworfen"-Meldung',
     ergebnisNurAufgabe.fehler,
+    'Session hat keine Aenderung committet.',
+  );
+
+  section('Aufgaben-Datei entgegen der Anweisung gestaged, aber nicht committet');
+  // Review-Nachtrag: der fs.rm oben schliesst nur die Luecke "Datei liegt
+  // untracked herum". Macht eine Session (entgegen der Anweisung im Prompt)
+  // `git add -A` und committet dann NICHT (z.B. weil npm test fehlschlaegt),
+  // wuerde `git status --porcelain` ohne den .git/info/exclude-Eintrag
+  // `AD SELBSTVERBESSERUNG_AUFGABE.md` zeigen - die Alarm-Meldung waere
+  // wieder da, obwohl nichts Eigenes passiert ist.
+  //
+  // Echtes git wendet .git/info/exclude nur auf `git add -A`/`git add .`
+  // (Wildcard-Adds) an: eine dort gelistete Datei wird davon uebersprungen,
+  // taucht also nie im Index auf. Der Fake bildet genau das nach: er legt
+  // beim `checkout -b` ein echtes `.git/info`-Verzeichnis im (echten) Klon-
+  // Pfad an, damit starteSessions echter `fs.appendFile`-Aufruf auf
+  // `.git/info/exclude` wirklich greift - und `git status --porcelain`
+  // liest diese echte Datei zurueck: steht die Aufgaben-Datei drin, verhaelt
+  // sich der Fake wie ein echtes `git add -A`, das sie uebersprungen hat
+  // (sauberer Status). Steht sie NICHT drin (Regressionsfall ohne den Fix),
+  // meldet der Fake sie als gestaged.
+  const fakeAusfuehrenGestaged = async (cmd, args, options = {}) => {
+    if (istRemoteAbfrage(cmd, args)) {
+      return { code: 0, stdout: `${REMOTE_URL}\n`, stderr: '' };
+    }
+    if (cmd === 'git' && args[0] === 'checkout' && args[1] === '-b') {
+      fs.mkdirSync(path.join(options.cwd, '.git', 'info'), { recursive: true });
+      return { code: 0, stdout: '', stderr: '' };
+    }
+    if (cmd === 'git' && args[0] === 'diff') {
+      return { code: 0, stdout: '', stderr: '' };
+    }
+    if (cmd === 'git' && args[0] === 'status' && options.cwd && options.cwd.includes('ghostxx-')) {
+      const excludePfad = path.join(options.cwd, '.git', 'info', 'exclude');
+      const excludeInhalt = fs.existsSync(excludePfad) ? fs.readFileSync(excludePfad, 'utf8') : '';
+      const waereUebersprungen = excludeInhalt.includes('SELBSTVERBESSERUNG_AUFGABE.md');
+      return {
+        code: 0,
+        stdout: waereUebersprungen ? '' : 'AD SELBSTVERBESSERUNG_AUFGABE.md\n',
+        stderr: '',
+      };
+    }
+    if (cmd === 'claude') {
+      return { code: 0, stdout: 'fertig', stderr: '' };
+    }
+    return { code: 0, stdout: '', stderr: '' };
+  };
+
+  const ergebnisGestaged = await session.starteSession(
+    { titel: 'Gestaged aber nicht committet', belege: [] },
+    {
+      ausfuehren: fakeAusfuehrenGestaged,
+      leseZusammenfassung: async () => 'Nichts geaendert, nichts committet.',
+    },
+  );
+  check('Als nicht ok gemeldet (nichts committet)', ergebnisGestaged.ok === false);
+  equal(
+    'Der .git/info/exclude-Eintrag verhindert die Alarm-Meldung auch im gestagten Fall',
+    ergebnisGestaged.fehler,
     'Session hat keine Aenderung committet.',
   );
 
