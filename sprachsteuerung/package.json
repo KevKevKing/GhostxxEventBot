@@ -1,0 +1,15 @@
+{
+  "name": "ghostxx-sprachsteuerung",
+  "version": "0.1.0",
+  "description": "Eigenstaendiges Sprachsteuerungs-Programm fuer Ghostxx - komplett getrennt vom Discord-Bot.",
+  "main": "programm.js",
+  "scripts": {
+    "start": "node programm.js",
+    "test": "node tests/run.js"
+  },
+  "dependencies": {
+    "@picovoice/pvrecorder-node": "^1.2.0",
+    "dotenv": "^17.4.2",
+    "sherpa-onnx-node": "^1.13.8"
+  }
+}
