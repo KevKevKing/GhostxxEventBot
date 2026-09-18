@@ -35,5 +35,11 @@ section('Erfolgreiche Transkription');
   check('nicht ok bei leerem Text', leerErgebnis.ok === false);
   equal('Grund kein_text', leerErgebnis.grund, 'kein_text');
 
+  section('dateiLesen wirft Fehler (z.B. ENOENT)');
+  const fakeWerfendeeDatei = async () => { throw new Error('ENOENT: Datei nicht gefunden'); };
+  const werfFehlerErgebnis = await transkribiere('C:/temp/aufnahme.wav', { ausfuehren: fakeAusfuehren, dateiLesen: fakeWerfendeeDatei });
+  check('nicht ok bei Datei-Fehler', werfFehlerErgebnis.ok === false);
+  equal('Grund fehlgeschlagen', werfFehlerErgebnis.grund, 'fehlgeschlagen');
+
   finish();
 })();

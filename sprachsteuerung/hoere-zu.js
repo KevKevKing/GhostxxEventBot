@@ -1,7 +1,6 @@
 require('dotenv').config();
 const { spawn } = require('node:child_process');
 const fs = require('node:fs');
-const path = require('node:path');
 
 // Sprache-zu-Text ueber ein vorkompiliertes whisper.cpp-Programm, per
 // child_process wie das Hauptprojekt bereits externe Werkzeuge einbindet
@@ -36,7 +35,13 @@ async function transkribiere(wavPfad, { ausfuehren = echtAusfuehren, dateiLesen 
     return { ok: false, grund: 'fehlgeschlagen' };
   }
 
-  const inhalt = (await dateiLesen(`${ausgabeOhneEndung}.txt`)).toString('utf8').trim();
+  let inhalt;
+  try {
+    inhalt = (await dateiLesen(`${ausgabeOhneEndung}.txt`)).toString('utf8').trim();
+  } catch {
+    return { ok: false, grund: 'fehlgeschlagen' };
+  }
+
   if (!inhalt) return { ok: false, grund: 'kein_text' };
 
   return { ok: true, text: inhalt };
