@@ -11,13 +11,13 @@ const os = require('node:os');
 // Piper bekommt den Text ueber stdin, nicht als Kommandozeilen-Argument -
 // laengere Saetze mit Sonderzeichen waeren als Argument fragil.
 
-function echtAusfuehren(cmd, args, options = {}) {
+function echtAusfuehren(cmd, args, { stdin, ...spawnOptions } = {}) {
   return new Promise((resolve) => {
-    const p = spawn(cmd, args, { windowsHide: true, ...options });
+    const p = spawn(cmd, args, { windowsHide: true, ...spawnOptions });
     let stdout = '';
     let stderr = '';
-    if (options.stdin) {
-      p.stdin.write(options.stdin);
+    if (stdin) {
+      p.stdin.write(stdin);
       p.stdin.end();
     }
     p.stdout?.on('data', (d) => { stdout += d; });
@@ -32,29 +32,37 @@ function pfadFuerTemp() {
 }
 
 async function sprich(text, { ausfuehren = echtAusfuehren, ausgabePfad = pfadFuerTemp() } = {}) {
-  const piperLauf = await ausfuehren(process.env.PIPER_PROGRAMM_PFAD, [
-    '--model', process.env.PIPER_STIMME_PFAD,
-    '--output_file', ausgabePfad,
-  ], { stdin: text });
+  // try/catch um die ganze Funktion: ausfuehren() ist von aussen injizierbar
+  // und kann - wie echtAusfuehren() via spawn() bei z.B. fehlender/leerer
+  // PIPER_PROGRAMM_PFAD-Umgebungsvariable - auch SYNCHRON werfen, bevor
+  // ueberhaupt ein Promise entsteht. sprich() darf trotzdem nie werfen.
+  try {
+    const piperLauf = await ausfuehren(process.env.PIPER_PROGRAMM_PFAD, [
+      '--model', process.env.PIPER_STIMME_PFAD,
+      '--output_file', ausgabePfad,
+    ], { stdin: text });
 
-  if (piperLauf.code !== 0) {
-    return { ok: false, grund: 'piper_fehlgeschlagen' };
+    if (piperLauf.code !== 0) {
+      return { ok: false, grund: 'piper_fehlgeschlagen' };
+    }
+
+    // PowerShell-Escaping: einfache Anfuehrungszeichen im Pfad verdoppeln -
+    // in der Praxis unwahrscheinlich (Temp-Pfade), aber billig abzusichern.
+    const sichererPfad = ausgabePfad.replace(/'/g, "''");
+    const wiedergabeLauf = await ausfuehren('powershell', [
+      '-NoProfile',
+      '-Command',
+      `(New-Object Media.SoundPlayer '${sichererPfad}').PlaySync()`,
+    ]);
+
+    if (wiedergabeLauf.code !== 0) {
+      return { ok: false, grund: 'wiedergabe_fehlgeschlagen' };
+    }
+
+    return { ok: true, grund: '' };
+  } catch {
+    return { ok: false, grund: 'unerwarteter_fehler' };
   }
-
-  // PowerShell-Escaping: einfache Anfuehrungszeichen im Pfad verdoppeln -
-  // in der Praxis unwahrscheinlich (Temp-Pfade), aber billig abzusichern.
-  const sichererPfad = ausgabePfad.replace(/'/g, "''");
-  const wiedergabeLauf = await ausfuehren('powershell', [
-    '-NoProfile',
-    '-Command',
-    `(New-Object Media.SoundPlayer '${sichererPfad}').PlaySync()`,
-  ]);
-
-  if (wiedergabeLauf.code !== 0) {
-    return { ok: false, grund: 'wiedergabe_fehlgeschlagen' };
-  }
-
-  return { ok: true, grund: '' };
 }
 
 module.exports = { sprich };

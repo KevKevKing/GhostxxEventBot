@@ -44,5 +44,13 @@ section('Erfolgreiche Sprachausgabe');
   check('nicht ok', wiedergabeFehlerErgebnis.ok === false);
   equal('Grund wiedergabe_fehlgeschlagen', wiedergabeFehlerErgebnis.grund, 'wiedergabe_fehlgeschlagen');
 
+  section('ausfuehren wirft synchron (z.B. spawn() bei fehlender Umgebungsvariable)');
+  const werfendesAusfuehren = () => { throw new Error('kaputt'); };
+  // Bewusst OHNE eigenes try/catch aufgerufen - beweist, dass sprich() selbst
+  // resolved statt den synchronen Wurf durchzureichen.
+  const werfenErgebnis = await sprich('Test', { ausfuehren: werfendesAusfuehren, ausgabePfad: 'C:/temp/antwort.wav' });
+  check('nicht ok', werfenErgebnis.ok === false);
+  equal('Grund unerwarteter_fehler', werfenErgebnis.grund, 'unerwarteter_fehler');
+
   finish();
 })();
