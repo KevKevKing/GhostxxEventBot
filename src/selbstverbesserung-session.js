@@ -446,6 +446,35 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
       return { ...ergebnis, fehler: `Branch konnte nicht angelegt werden: ${abgezweigt.stderr}` };
     }
 
+    // Review-Nachtrag zum fs.rm weiter unten: der fs.rm allein schliesst nur
+    // die Luecke "Datei liegt untracked herum". Wenn eine Session entgegen
+    // der ausdruecklichen Anweisung im Prompt `git add -A`/`git add .` macht
+    // und danach NICHT committet (z.B. weil npm test fehlschlaegt), landet
+    // SELBSTVERBESSERUNG_AUFGABE.md im Staging-Bereich. `git diff --name-only
+    // main...HEAD` sieht das weiterhin nicht (nichts committet), aber `git
+    // status --porcelain` zeigt dann `AD SELBSTVERBESSERUNG_AUFGABE.md` - die
+    // "Aenderungen wurden verworfen"-Meldung wuerde also wieder faelschlich
+    // ausgeloest, obwohl der fs.rm-Aufruf spaeter noch laeuft (er entfernt die
+    // Datei ja erst, nachdem die Claude-Code-Session schon fertig ist).
+    //
+    // Deshalb hier zusaetzlich, direkt nach dem Anlegen des Branches: beide
+    // von starteSession selbst geschriebenen Geruest-Dateien in
+    // .git/info/exclude eintragen. Damit sieht git sie in KEINEM Zustand
+    // (weder untracked noch gestaged) mehr, unabhaengig davon, was die
+    // Session mit `git add` macht. .git/info/exclude statt .gitignore, weil
+    // es nur lokal im Klon gilt und nie mitgepusht wird.
+    try {
+      await fs.appendFile(
+        path.join(klonPfad, '.git', 'info', 'exclude'),
+        '\nSELBSTVERBESSERUNG_AUFGABE.md\nSELBSTVERBESSERUNG_ZUSAMMENFASSUNG.md\n',
+      );
+    } catch {
+      // Kann nur scheitern, wenn .git/info im Klon fehlt (bei injiziertem
+      // `ausfuehren` in Tests legt git das nicht wirklich an). Der fs.rm
+      // weiter unten raeumt die Aufgaben-Datei trotzdem auf - das ist hier
+      // nur eine zusaetzliche Absicherung, kein Ersatz dafuer.
+    }
+
     // Gemessen bei einem echten End-zu-Ende-Testlauf (Kevin, 17.09.): ein
     // frischer `git clone` hat nie node_modules - .gitignore schliesst es aus,
     // wie bei jedem Checkout. Ohne diesen Schritt musste die Claude-Code-
@@ -506,6 +535,31 @@ async function starteSession(problem, { ausfuehren = echtAusfuehren, leseZusamme
     const zusammenfassung = leseZusammenfassung
       ? await leseZusammenfassung(klonPfad)
       : await leseZusammenfassungStandard(klonPfad);
+
+    // Gemessen bei einem echten End-zu-Ende-Testlauf (Kevin, 17.09.): die
+    // Aufgaben-Datei wird oben von starteSession selbst geschrieben, aber nie
+    // zu git hinzugefuegt und nie geloescht. Ohne diesen Schritt taucht sie in
+    // der "uncommittete Aenderungen"-Pruefung weiter unten (`git status
+    // --porcelain` im Klon) IMMER als `?? SELBSTVERBESSERUNG_AUFGABE.md` auf -
+    // unabhaengig davon, ob die Session ueberhaupt etwas geaendert hat. In
+    // einem gemessenen Lauf hat die Session korrekt "nichts geaendert, nichts
+    // committet" erkannt, starteSession aber trotzdem faelschlich "Aenderungen
+    // wurden verworfen" gemeldet, weil nur die eigene Aufgaben-Datei brach lag.
+    // `{ force: true }` analog zu leseZusammenfassungStandard oben: loescht
+    // still, wenn die Datei schon fehlt (z.B. weil die Session sie selbst
+    // geloescht hat). Zusaetzlich in try/catch wie die anderen fs-Aufrufe in
+    // diesem Modul (siehe leseZusammenfassungStandard, finally-Aufraeumung
+    // unten): `force: true` faengt nur eine bereits fehlende Datei ab, nicht
+    // z.B. eine unter Windows gesperrte. Ein seltener Fehlschlag hier darf
+    // eine sonst erfolgreiche, bereits committete Session nicht zum Absturz
+    // bringen und dadurch ungepusht verwerfen - die Datei liegt durch den
+    // .git/info/exclude-Eintrag oben ohnehin schon ausserhalb von gits Sicht.
+    try {
+      await fs.rm(path.join(klonPfad, 'SELBSTVERBESSERUNG_AUFGABE.md'), { force: true });
+    } catch {
+      // Aufraeumen ist hier nur Kosmetik (siehe Kommentar oben) - der Klon
+      // wird ohnehin im finally weiter unten komplett geloescht.
+    }
 
     // Der ernsteste denkbare Fehlerfall, deshalb ganz vorn - noch vor der
     // Frage, ob die Session ueberhaupt erfolgreich war. Auch eine
