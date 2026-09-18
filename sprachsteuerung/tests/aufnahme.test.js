@@ -1,4 +1,4 @@
-const { check, equal, finish, section } = require('./lib');
+const { check, finish, section } = require('./lib');
 const { berechneLautstaerke, erstelleStilleErkennung } = require('../aufnahme');
 
 function lauterFrame(laenge = 512, amplitude = 10000) {

@@ -14,7 +14,11 @@ const TEXTE = {
   unerwarteter_fehler: 'Da ist unterwegs etwas schiefgelaufen.',
 };
 
-const STANDARD = 'Da ist etwas schiefgelaufen.';
+// Bewusst anders formuliert als unerwarteter_fehler ("Da ist unterwegs etwas
+// schiefgelaufen.") - am Ohr klingen die beiden sonst kaum unterscheidbar,
+// dabei bedeutet dieser Fallback etwas anderes: ein GRUND, der gar nicht in
+// TEXTE bekannt ist.
+const STANDARD = 'Da ist etwas Unerwartetes passiert, das ich nicht genauer einordnen kann.';
 
 function textFuer(grund) {
   return TEXTE[grund] || STANDARD;
