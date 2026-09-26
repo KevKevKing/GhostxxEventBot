@@ -77,4 +77,20 @@ section('Startwort "start " (mit Leerzeichen) wird erkannt');
   check('art ist start', ergebnis.art === 'start');
 })();
 
+section('Beugungen von Startwoertern sind KEIN Startwort (Regression zu Finding 1 der Whole-Branch-Review)');
+(() => {
+  check('"startet" in normaler Frage', erkenneProgrammBefehl('Wann startet das Event heute?', LISTE).art === 'kein_befehl');
+  check('"gestartet"', erkenneProgrammBefehl('Hast du das Spiel schon gestartet?', LISTE).art === 'kein_befehl');
+  check('"geöffnet"', erkenneProgrammBefehl('Hat der Laden noch geöffnet?', LISTE).art === 'kein_befehl');
+  check('"starten" als Verb', erkenneProgrammBefehl('Wann starten wir morgen?', LISTE).art === 'kein_befehl');
+})();
+
+section('Eigenstaendige Startwoerter funktionieren weiterhin');
+(() => {
+  check('"starte"', erkenneProgrammBefehl('starte valorant', LISTE).art === 'start');
+  check('"start" mit Leerzeichen', erkenneProgrammBefehl('start valorant bitte', LISTE).art === 'start');
+  check('"öffne"', erkenneProgrammBefehl('öffne minecraft', LISTE).art === 'start');
+  check('"mach ... an"', erkenneProgrammBefehl('mach mal valorant an', LISTE).art === 'start');
+})();
+
 finish();

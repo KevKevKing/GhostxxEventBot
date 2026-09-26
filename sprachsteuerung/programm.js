@@ -14,9 +14,11 @@ const { starteProgramm: starteProgrammEcht } = require('./programm-starter');
 const { ladeProgrammliste } = require('./programmliste');
 
 // Verbindet die einzelnen Schritte zur kompletten Kette: Aufnahme (WAV) ->
-// Text -> Antwort -> Sprache. Jeder Fehlerfall fuehrt zu einer festen,
-// gesprochenen Antwort statt eines Absturzes - das Programm muss nach
-// jedem Fehler sofort wieder auf das naechste Aufwachwort warten koennen.
+// Text -> Antwort -> Sprache, oder direkt ein erkannter Programmbefehl statt
+// Antwort/Sprache-Umweg (siehe erkenneProgramm/starteProgrammFn unten). Jeder
+// Fehlerfall fuehrt zu einer festen, gesprochenen Antwort statt eines
+// Absturzes - das Programm muss nach jedem Fehler sofort wieder auf das
+// naechste Aufwachwort warten koennen.
 
 const OLLAMA_TIMEOUT_MS = 15 * 1000;
 
@@ -100,8 +102,9 @@ async function verarbeiteAeusserung(wavPfad, {
     return { ok: true, gesagt: antwort.text };
   } catch (fehler) {
     // Jeder synchrone oder asynchrone Wurf aus transkribieren/antworten/
-    // sprechen landet hier - das Dauerprogramm muss danach sofort wieder
-    // auf das naechste Aufwachwort warten koennen statt stehenzubleiben.
+    // sprechen/erkenneProgramm/starteProgrammFn landet hier - das
+    // Dauerprogramm muss danach sofort wieder auf das naechste Aufwachwort
+    // warten koennen statt stehenzubleiben.
     // console.error hier ist wichtig: ohne Log-Zeile waere ein echter Bug in
     // der Kette nur noch als gesprochener Satz erkennbar - bei einem
     // Programm, dessen ganze Schnittstelle Audio ist, die schlechteste

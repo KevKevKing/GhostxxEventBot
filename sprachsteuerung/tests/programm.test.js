@@ -161,5 +161,16 @@ section('Erfolgreicher Durchlauf');
   check('ok', ergebnisP4.ok === true);
   equal('normale Antwort gesprochen', gesprochenP4[0], 'Sonnig.');
 
+  section('starteProgrammFn wirft synchron -> kein Absturz');
+  const gesprochenP5 = [];
+  const ergebnisP5 = await verarbeiteAeusserung('C:/temp/aufnahme.wav', {
+    transkribieren: async () => ({ ok: true, text: 'starte valorant' }),
+    antworten: async () => ({ ok: true, text: 'x' }),
+    sprechen: async (text) => { gesprochenP5.push(text); return { ok: true }; },
+    programmListe: [{ name: 'Valorant', pfad: 'C:/Spiele/Valorant.exe' }],
+    starteProgrammFn: () => { throw new Error('kaputt'); },
+  });
+  check('nicht ok statt Absturz', ergebnisP5.ok === false);
+
   finish();
 })();

@@ -49,5 +49,22 @@ section('istUri');
   check('nicht ok', ergebnis.ok === false);
   check('grund gesetzt', ergebnis.grund === 'programm_fehlgeschlagen');
 
+  section('.lnk-Datei wird wie eine URI ueber "start" geoeffnet');
+  aufgerufenMit = null;
+  ergebnis = await starteProgramm(
+    { name: 'Verknuepfung', pfad: 'C:/Spiele/Valorant.lnk' },
+    { ausfuehren: async (cmd, args) => { aufgerufenMit = { cmd, args }; return { ok: true }; } },
+  );
+  check('ok', ergebnis.ok === true);
+  check('cmd ist cmd.exe', aufgerufenMit.cmd === 'cmd');
+
+  section('Datei-Pfad bekommt sein eigenes Verzeichnis als cwd');
+  let aufgerufenMitOptionen = null;
+  await starteProgramm(
+    { name: 'Valorant', pfad: 'C:/Spiele/Valorant/Valorant.exe' },
+    { ausfuehren: async (cmd, args, optionen) => { aufgerufenMitOptionen = optionen; return { ok: true }; } },
+  );
+  check('cwd ist das Verzeichnis der exe', aufgerufenMitOptionen.cwd === 'C:/Spiele/Valorant');
+
   finish();
 })();

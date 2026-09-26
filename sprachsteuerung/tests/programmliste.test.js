@@ -72,4 +72,24 @@ section('ladeProgrammliste: ungueltige Eintraege werden rausgefiltert');
   fs.rmSync(pfad, { force: true });
 })();
 
+section('ladeProgrammliste: BOM am Dateianfang wird entfernt');
+(() => {
+  const pfad = temporaereDatei('\uFEFF' + JSON.stringify([{ name: 'Valorant', pfad: 'C:/x.exe' }]));
+  const liste = ladeProgrammliste(pfad);
+  equal('ein Eintrag trotz BOM geladen', liste.length, 1);
+  fs.rmSync(pfad, { force: true });
+})();
+
+section('ladeProgrammliste: leerer Name wird rausgefiltert');
+(() => {
+  const pfad = temporaereDatei(JSON.stringify([
+    { name: '', pfad: 'C:/x.exe' },
+    { name: 'Valorant', pfad: 'C:/y.exe' },
+  ]));
+  const liste = ladeProgrammliste(pfad);
+  equal('nur der Eintrag mit echtem Namen bleibt', liste.length, 1);
+  equal('der gueltige Eintrag', liste[0].name, 'Valorant');
+  fs.rmSync(pfad, { force: true });
+})();
+
 finish();

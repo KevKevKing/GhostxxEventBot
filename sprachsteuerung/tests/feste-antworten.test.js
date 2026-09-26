@@ -5,7 +5,7 @@ section('Jeder bekannte Grund hat einen eigenen Satz');
 const bekannt = [
   'nicht_erreichbar', 'zeitueberschreitung', 'leer', 'fehlgeschlagen',
   'kein_text', 'piper_fehlgeschlagen', 'wiedergabe_fehlgeschlagen', 'timeout_ollama',
-  'unerwarteter_fehler',
+  'unerwarteter_fehler', 'programm_unbekannt', 'programm_fehlgeschlagen',
 ];
 const gesehen = new Set();
 for (const grund of bekannt) {

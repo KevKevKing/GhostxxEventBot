@@ -65,6 +65,16 @@ explizit abgelehnt.
    jeder Aeusserung neu gelesen).
 
 Bekannter, akzeptierter Sonderfall: ein Satz, der zufaellig ein Startwort
-("starte"/"öffne"/"mach") enthaelt, aber keinen Programmbefehl meint (z.B.
-"wie starte ich am besten in den Tag?"), wird faelschlich als "kenne ich
-nicht" behandelt statt normal beantwortet - siehe Spec.
+("starte"/"öffne"/"mach") als eigenstaendiges Wort enthaelt, aber keinen
+Programmbefehl meint (z.B. "wie starte ich am besten in den Tag?"), wird
+faelschlich als "kenne ich nicht" behandelt statt normal beantwortet - siehe
+Spec. Beugungen wie "startet"/"gestartet"/"geöffnet"/"starten" sind davon
+NICHT betroffen und werden korrekt als normaler Chat erkannt.
+
+Manche Spiele starten nicht direkt ueber ihre .exe (z.B. brauchen sie einen
+Launcher wie den Riot Client fuer Valorant) - dafuer eignet sich oft eine
+`.lnk`-Verknuepfung vom Desktop als `pfad`, die genauso wie eine URI ueber
+Windows' "start"-Befehl geoeffnet wird. Bei URIs (z.B. Steam) meldet Ghost
+"Starte X." bereits, wenn der Aufruf selbst geklappt hat - ob das Spiel
+danach wirklich startet (z.B. wenn Steam nicht laeuft), kann er nicht
+pruefen.
