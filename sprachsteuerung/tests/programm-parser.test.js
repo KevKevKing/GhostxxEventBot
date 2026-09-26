@@ -59,4 +59,22 @@ section('leere Liste -> nie start, aber Startwort fuehrt zu unbekannt');
   check('art ist unbekannt', ergebnis.art === 'unbekannt');
 })();
 
+section('"mach" als Wortbestandteil (z.B. "gemacht") ist KEIN Startwort');
+(() => {
+  const ergebnis = erkenneProgrammBefehl('das habe ich schon gemacht', LISTE);
+  check('art ist kein_befehl', ergebnis.art === 'kein_befehl');
+})();
+
+section('"mach" als eigenstaendiges Wort ist weiterhin ein Startwort');
+(() => {
+  const ergebnis = erkenneProgrammBefehl('mach mal valorant an', LISTE);
+  check('art ist start', ergebnis.art === 'start');
+})();
+
+section('Startwort "start " (mit Leerzeichen) wird erkannt');
+(() => {
+  const ergebnis = erkenneProgrammBefehl('start valorant bitte', LISTE);
+  check('art ist start', ergebnis.art === 'start');
+})();
+
 finish();
