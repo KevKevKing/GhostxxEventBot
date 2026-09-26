@@ -63,3 +63,8 @@ explizit abgelehnt.
    Spiel-Eigenschaften bei Steam oder online).
 3. Neue Eintraege wirken sofort, kein Neustart noetig (die Liste wird bei
    jeder Aeusserung neu gelesen).
+
+Bekannter, akzeptierter Sonderfall: ein Satz, der zufaellig ein Startwort
+("starte"/"öffne"/"mach") enthaelt, aber keinen Programmbefehl meint (z.B.
+"wie starte ich am besten in den Tag?"), wird faelschlich als "kenne ich
+nicht" behandelt statt normal beantwortet - siehe Spec.
