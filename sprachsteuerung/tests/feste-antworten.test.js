@@ -18,4 +18,10 @@ for (const grund of bekannt) {
 section('Unbekannter Grund faellt nicht auseinander');
 check('generischer Text statt Wurf', typeof textFuer('irgendwas-unbekanntes') === 'string');
 
+section('neue Grund-Werte fuer Baustein 2 (Programme starten)');
+check('programm_unbekannt hat einen Text', textFuer('programm_unbekannt').length > 0);
+check('programm_unbekannt ist nicht der Standard-Fallback', textFuer('programm_unbekannt') !== textFuer('ein-grund-den-es-nicht-gibt'));
+check('programm_fehlgeschlagen hat einen Text', textFuer('programm_fehlgeschlagen').length > 0);
+check('programm_fehlgeschlagen ist nicht der Standard-Fallback', textFuer('programm_fehlgeschlagen') !== textFuer('ein-grund-den-es-nicht-gibt'));
+
 finish();

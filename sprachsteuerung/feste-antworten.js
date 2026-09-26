@@ -12,6 +12,8 @@ const TEXTE = {
   piper_fehlgeschlagen: 'Ich kann das gerade nicht aussprechen.',
   wiedergabe_fehlgeschlagen: 'Ich kann gerade nicht über die Lautsprecher sprechen.',
   unerwarteter_fehler: 'Da ist unterwegs etwas schiefgelaufen.',
+  programm_unbekannt: 'Das kenne ich nicht, das musst du erst zur Liste hinzufügen.',
+  programm_fehlgeschlagen: 'Das hat leider nicht geklappt.',
 };
 
 // Bewusst anders formuliert als unerwarteter_fehler ("Da ist unterwegs etwas
