@@ -48,3 +48,18 @@ Kevin selbst per Ohr, siehe die manuelle Abnahme am Ende des Umsetzungsplans.
 `MINDEST_FRAMES`, `MINDEST_LAUTSTAERKE` und `RUHEPHASE_NACH_ANTWORT_MS` in
 `programm.js` sind Startwerte, noch nicht endgueltig am echten Mikrofon/Raum
 feinjustiert - gehoert zur manuellen Abnahme dazu.
+
+## Baustein 2: Programme starten
+
+"Ghost, starte <Name>" startet ein Programm/Spiel aus einer festen, von
+dir gepflegten Liste - unbekannte Namen werden NICHT geraten, sondern
+explizit abgelehnt.
+
+1. `programme.example.json` nach `programme.json` kopieren.
+2. Eigene Eintraege eintragen: `name` ist das gesprochene Wort, `pfad` ist
+   entweder ein direkter Datei-Pfad (`.exe`) oder eine URI (z.B.
+   `steam://rungameid/<ID>` fuer Spiele, die ueber Steam/einen Launcher
+   starten muessen - die Rungame-ID findet man z.B. in den
+   Spiel-Eigenschaften bei Steam oder online).
+3. Neue Eintraege wirken sofort, kein Neustart noetig (die Liste wird bei
+   jeder Aeusserung neu gelesen).
