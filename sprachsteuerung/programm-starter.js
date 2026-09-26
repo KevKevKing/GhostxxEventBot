@@ -9,13 +9,18 @@ function istUri(pfad) {
   return /^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//.test(pfad);
 }
 
+// echtAusfuehren wartet auf das 'spawn'-Event statt sofort zu resolven. Node.js
+// kann einen Start-Fehler (z.B. ENOENT wenn die .exe nicht existiert) erst
+// asynchron im 'error'-Handler melden - sofortiges Resolven wuerde das verpassen.
 function echtAusfuehren(cmd, args) {
   return new Promise((resolve) => {
     try {
       const p = spawn(cmd, args, { windowsHide: true, detached: true, stdio: 'ignore' });
       p.on('error', () => resolve({ ok: false }));
-      p.unref();
-      resolve({ ok: true });
+      p.on('spawn', () => {
+        p.unref();
+        resolve({ ok: true });
+      });
     } catch {
       resolve({ ok: false });
     }

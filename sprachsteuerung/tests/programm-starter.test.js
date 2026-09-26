@@ -44,5 +44,10 @@ section('istUri');
   check('nicht ok', ergebnis.ok === false);
   check('grund gesetzt', ergebnis.grund === 'programm_fehlgeschlagen');
 
+  section('echter Programmstart gegen nicht existierende Datei -> ok:false (kein falsches ok:true)');
+  ergebnis = await starteProgramm({ name: 'Nicht Vorhanden', pfad: 'C:/diese/datei/gibt/es/wirklich/nicht.exe' });
+  check('nicht ok', ergebnis.ok === false);
+  check('grund gesetzt', ergebnis.grund === 'programm_fehlgeschlagen');
+
   finish();
 })();
