@@ -6,6 +6,12 @@ const { transkribiere: transkribierenEcht } = require('./hoere-zu');
 const { sprich: sprechenEcht } = require('./sprich');
 const { erstelleStilleErkennung, berechneLautstaerke } = require('./aufnahme');
 const { textFuer } = require('./feste-antworten');
+const { erkenneProgrammBefehl } = require('./programm-parser');
+// Umbenannt beim Import: die Datei hat weiter unten eine eigene Funktion
+// namens starteProgramm() (Mikrofon-Dauerschleife) - ohne Alias wuerde der
+// Import mit dieser bestehenden Funktionsdeklaration kollidieren.
+const { starteProgramm: starteProgrammEcht } = require('./programm-starter');
+const { ladeProgrammliste } = require('./programmliste');
 
 // Verbindet die einzelnen Schritte zur kompletten Kette: Aufnahme (WAV) ->
 // Text -> Antwort -> Sprache. Jeder Fehlerfall fuehrt zu einer festen,
@@ -37,6 +43,9 @@ async function verarbeiteAeusserung(wavPfad, {
   antworten = antwortenEcht,
   sprechen = sprechenEcht,
   ollamaTimeoutMs = OLLAMA_TIMEOUT_MS,
+  erkenneProgramm = erkenneProgrammBefehl,
+  starteProgrammFn = starteProgrammEcht,
+  programmListe = ladeProgrammliste(),
 } = {}) {
   try {
     console.log('  -> verstehe... (t0)');
@@ -51,6 +60,24 @@ async function verarbeiteAeusserung(wavPfad, {
     }
 
     console.log(`  -> verstanden: "${gehoert.text}"`);
+
+    const befehl = erkenneProgramm(gehoert.text, programmListe);
+    if (befehl.art === 'start') {
+      console.log(`  -> Programmbefehl erkannt: ${befehl.eintrag.name}`);
+      const startErgebnis = await starteProgrammFn(befehl.eintrag);
+      const text = startErgebnis.ok
+        ? `Starte ${befehl.eintrag.name}.`
+        : textFuer(startErgebnis.grund);
+      await sprechenOhneWurf(sprechen, text);
+      return { ok: startErgebnis.ok, gesagt: text };
+    }
+    if (befehl.art === 'unbekannt') {
+      console.log('  -> Programmbefehl erkannt, aber kein bekannter Name');
+      const text = textFuer('programm_unbekannt');
+      await sprechenOhneWurf(sprechen, text);
+      return { ok: false, gesagt: text };
+    }
+
     console.log('  -> denke nach...');
     const t1 = Date.now();
     const antwort = await mitTimeout(
