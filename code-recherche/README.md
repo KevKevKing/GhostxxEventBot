@@ -49,13 +49,27 @@ npm test -- code-recherche
 Ohne `TAVILY_API_KEY` gibt `sucheCode()` sauber `{ok:false, grund:
 'kein_api_schluessel'}` zurueck, statt zu werfen oder gegen Tavily zu laufen.
 
+## Gemessener Befund: Tavily beantwortet den Fehlertext
+
+Dieselbe Anfrage, an der DuckDuckGo gescheitert ist, echt gegen Tavily
+getestet (nicht gemockt):
+
+`"TypeError cannot read properties of undefined"` → eine kurze, inhaltlich
+richtige Erklaerung der Fehlerursache (Zugriff auf eine Eigenschaft eines
+`undefined`-Werts) mit zwei brauchbaren Gegenmassnahmen (Optional Chaining,
+Variablen vor Gebrauch initialisieren), plus Quelle:
+`rollbar.com/blog/javascript-typeerror-cannot-read-property-of-undefined`.
+
+**Damit ist die technische Machbarkeit gezeigt** - Tavily beantwortet genau
+den Fall, an dem die schluessellose Variante gescheitert ist.
+
 ## Offene Fragen, bevor daraus mehr wird
 
-- Reicht Tavilys Qualitaet fuer echte Fehlertexte? (Noch nicht gemessen -
-  fehlt der API-Key.)
 - Wo waere der feste Parser ("erst ablesen, dann raten"), der entscheidet,
   wann ueberhaupt nachgeschlagen wird?
 - Soll das in den normalen Chat (`ollama.js`) oder nur in
   Selbstverbesserungs-Sessions einfliessen?
+- Wie wird eine englische Tavily-Antwort im deutschsprachigen Chat
+  eingebaut - uebersetzen lassen, oder als Zitat stehen lassen?
 
 Das sind Kevins Entscheidungen, keine technischen.
