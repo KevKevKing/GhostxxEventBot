@@ -16,15 +16,29 @@ bereits angebunden.
 
 ## Was es tut
 
-`sucheCode(anfrage)` fragt DuckDuckGos Instant-Answer-API ab (`websuche.js`) —
-bewusst gewaehlt, weil sie **ohne Konto/Schluessel** funktioniert, also keine
-Anmeldedaten irgendwo hinterlegt werden muessen. Nachteil: liefert nur kurze
-Zusammenfassungen, keine vollstaendige Suchergebnisliste — fuer einen echten
-Einsatz muesste man das gegen eine bessere (dann aber schluesselpflichtige)
-Such-API messen.
+`sucheCode(anfrage)` fragt die Tavily-Such-API ab (`websuche.js`, braucht
+`TAVILY_API_KEY` in `.env`).
+
+**Wechsel-Historie:** zuerst mit DuckDuckGos Instant-Answer-API gebaut (kein
+Konto noetig) - gemessener Befund: gut fuer Lexikon-Begriffe ("Node.js"), aber
+**keine Antwort** auf einen echten Fehlertext ("TypeError cannot read
+properties of undefined"). Genau das ist aber der Hauptfall fuer eine
+Coding-Hilfe. Brave Search API kam als naechstes in Frage, verlangt seit
+Februar 2026 aber eine Kreditkarte (Startguthaben, danach automatische
+Abbuchung) - abgelehnt. Tavily (extra fuer KI-Agenten gebaut) hat ein
+kostenloses Kontingent **ohne Kreditkarte** (1.000 Anfragen/Monat, Stand der
+Recherche 2026-09-27) - dabei geblieben.
 
 Nur lesend. Kein Ausfuehren von Code, kein Zugriff auf GitHub-Schreibrechte,
 kein eigener Speicher.
+
+## Einrichten
+
+1. Kostenloses Konto auf [tavily.com](https://www.tavily.com) anlegen (Mail +
+   Passwort, keine Kreditkarte noetig)
+2. API-Key im Dashboard erzeugen
+3. In `code-recherche/.env` eintragen: `TAVILY_API_KEY=tvly-...`
+   (`.env` ist gitignored wie bei `sprachsteuerung/`)
 
 ## Testen
 
@@ -32,25 +46,13 @@ kein eigener Speicher.
 npm test -- code-recherche
 ```
 
-## Gemessener Befund: DuckDuckGo reicht nicht
-
-Zwei echte Testabfragen gegen die echte API (nicht gemockt):
-
-- `"Node.js"` → gute, brauchbare Zusammenfassung (Wikipedia-gestuetzt)
-- `"TypeError cannot read properties of undefined"` → **keine Antwort**
-  (`keine_antwort_gefunden`)
-
-Die zweite Art Frage ist genau der Fall, fuer den eine Coding-Hilfe eigentlich
-gebraucht wuerde (ein echter Fehlertext, keine Begriffserklaerung). Die
-Instant-Answer-API ist fuer Lexikon-Wissen gebaut, nicht fuer Fehlersuche.
-**Ergebnis: mit dieser schluessellosen API allein laesst sich die eigentliche
-Idee nicht sinnvoll umsetzen.** Fuer echte Coding-Fragen braeuchte es eine
-richtige Such-API (z.B. Bing/Google/Serper) oder eine GitHub-Code-Suche -
-beide brauchen einen API-Schluessel, den ich nicht ohne Ruecksprache anlege.
+Ohne `TAVILY_API_KEY` gibt `sucheCode()` sauber `{ok:false, grund:
+'kein_api_schluessel'}` zurueck, statt zu werfen oder gegen Tavily zu laufen.
 
 ## Offene Fragen, bevor daraus mehr wird
 
-- Welche Such-API (mit Schluessel) waere es, und wer legt den Zugang an?
+- Reicht Tavilys Qualitaet fuer echte Fehlertexte? (Noch nicht gemessen -
+  fehlt der API-Key.)
 - Wo waere der feste Parser ("erst ablesen, dann raten"), der entscheidet,
   wann ueberhaupt nachgeschlagen wird?
 - Soll das in den normalen Chat (`ollama.js`) oder nur in

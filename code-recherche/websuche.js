@@ -1,27 +1,31 @@
-const https = require('node:https');
-
 // Prototyp/Testbaustein: rein lesende Web-Nachschlage-Funktion fuer
 // Coding-Fragen. Bewusst NICHT an src/ (den echten Bot) angeschlossen - siehe
-// README.md in diesem Ordner. Keine Anmeldedaten noetig: DuckDuckGos Instant-
-// Answer-API ist ohne Konto/Schluessel nutzbar, liefert dafuer nur kurze
-// Zusammenfassungen statt vollstaendiger Suchergebnisse.
+// README.md in diesem Ordner.
+//
+// Tavily statt DuckDuckGo (siehe README fuer den Wechselgrund): braucht einen
+// API-Schluessel (TAVILY_API_KEY), aber liefert dafuer auch fuer echte
+// Fehlertexte brauchbare Ergebnisse. Kostenloses Kontingent ohne Kreditkarte
+// (1.000 Anfragen/Monat, Stand der Recherche).
 //
 // {ok, grund}-Rueckgabe wie die uebrigen Module in diesem Projekt: darf nie
 // werfen, auch nicht bei einem synchronen Fehler in einer injizierten
 // abrufen()-Funktion.
 
-const ZEITLIMIT_MS = 5000;
+const ENDPUNKT = 'https://api.tavily.com/search';
+const ZEITLIMIT_MS = 8000;
 
-function echtAbrufen(url) {
-  return new Promise((resolve, reject) => {
-    const anfrage = https.get(url, { timeout: ZEITLIMIT_MS }, (antwort) => {
-      let inhalt = '';
-      antwort.on('data', (teil) => { inhalt += teil; });
-      antwort.on('end', () => resolve({ status: antwort.statusCode, inhalt }));
-    });
-    anfrage.on('timeout', () => anfrage.destroy(new Error('Zeitlimit ueberschritten')));
-    anfrage.on('error', reject);
+async function echtAbrufen(anfrage) {
+  const antwort = await fetch(ENDPUNKT, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${process.env.TAVILY_API_KEY}`,
+    },
+    body: JSON.stringify({ query: anfrage, include_answer: true, max_results: 3 }),
+    signal: AbortSignal.timeout(ZEITLIMIT_MS),
   });
+  const daten = await antwort.json().catch(() => null);
+  return { status: antwort.status, daten };
 }
 
 async function sucheCode(anfrage, { abrufen = echtAbrufen } = {}) {
@@ -30,21 +34,18 @@ async function sucheCode(anfrage, { abrufen = echtAbrufen } = {}) {
       return { ok: false, grund: 'leere_anfrage' };
     }
 
-    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(anfrage)}&format=json&no_html=1&skip_disambig=1`;
-    const antwort = await abrufen(url);
+    if (!process.env.TAVILY_API_KEY) {
+      return { ok: false, grund: 'kein_api_schluessel' };
+    }
 
-    if (!antwort || antwort.status !== 200) {
+    const { status, daten } = await abrufen(anfrage);
+
+    if (status !== 200 || !daten) {
       return { ok: false, grund: 'abruf_fehlgeschlagen' };
     }
 
-    let daten;
-    try {
-      daten = JSON.parse(antwort.inhalt);
-    } catch {
-      return { ok: false, grund: 'antwort_nicht_lesbar' };
-    }
-
-    const text = daten.AbstractText || daten.Answer || '';
+    const ersterTreffer = Array.isArray(daten.results) ? daten.results[0] : null;
+    const text = daten.answer || ersterTreffer?.content || '';
     if (!text) {
       return { ok: false, grund: 'keine_antwort_gefunden' };
     }
@@ -52,7 +53,7 @@ async function sucheCode(anfrage, { abrufen = echtAbrufen } = {}) {
     return {
       ok: true,
       text,
-      quelle: daten.AbstractURL || '',
+      quelle: ersterTreffer?.url || '',
     };
   } catch {
     return { ok: false, grund: 'unerwarteter_fehler' };
