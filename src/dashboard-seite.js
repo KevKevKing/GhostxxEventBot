@@ -145,18 +145,6 @@ const HTML = String.raw`<!doctype html>
     100% { opacity: 0; transform: scale(1.04); }
   }
 
-  .frage { border-left: 3px solid var(--akzent); background: #0f1620;
-           padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; }
-  .frage p { margin: 0 0 4px; }
-  .frage .warum { color: var(--leise); font-size: 12px; margin-bottom: 8px; }
-  .frage form { display: flex; gap: 6px; }
-  .frage input { flex: 1; background: #0b0e13; border: 1px solid var(--rand);
-                 color: var(--text); border-radius: 6px; padding: 6px 9px;
-                 font: inherit; }
-  .frage button { background: var(--akzent); border: 0; color: #08111f;
-                  border-radius: 6px; padding: 6px 14px; font: inherit;
-                  font-weight: 600; cursor: pointer; }
-  .frage.fertig { border-color: var(--gut); opacity: .6; }
   .pause-knopf { background: var(--karte2, #16202c); border: 1px solid var(--rand); color: var(--text);
                  border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 12px;
                  font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
@@ -368,7 +356,6 @@ const HTML = String.raw`<!doctype html>
      Bildschirm wird von selbst mehr sichtbar. */
   .rollen { max-height: 21vh; overflow-y: auto; }
   #logbuch { max-height: 27vh; overflow-y: auto; }
-  #fragen { max-height: 34vh; overflow-y: auto; }
   #bilder { max-height: 30vh; overflow-y: auto; }
   .terminal { max-height: 22vh; overflow-y: auto; margin: 0;
               font: 12px/1.5 Consolas, monospace; color: #7fd4e8;
@@ -470,11 +457,6 @@ const HTML = String.raw`<!doctype html>
     </div>
 
     <div class="spalte">
-      <div class="karte" id="karte-fragen" style="display:none">
-        <h2>Er fragt</h2>
-        <div id="fragen"></div>
-      </div>
-
       <div class="karte">
         <h2><span>Bilder — was er gelesen hat</span><span class="live-pill"><i></i>OCR</span></h2>
         <div id="bilder"></div>
@@ -786,53 +768,8 @@ function zeichneLogbuch(lb, d) {
   + (lb.zeilen.length > 14 ? '<div class="leise">… und ' + (lb.zeilen.length - 14) + ' weitere</div>' : '');
 }
 
-// Beantwortete Fragen bleiben stehen, bis die Seite neu geladen wird - sonst
-// verschwindet die Zeile unter den Fingern, sobald man abschickt.
-const erledigt = new Set();
-
-function zeichneFragen(fragen) {
-  const offen = (fragen || []).filter((f) => !erledigt.has(f.id));
-  $('karte-fragen').style.display = offen.length ? '' : 'none';
-  if (!offen.length) return;
-
-  // Nicht neu zeichnen, solange jemand tippt - sonst ist der Text weg.
-  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
-
-  $('fragen').innerHTML = offen.map((f) =>
-    '<div class="frage" data-id="' + sicher(f.id) + '">'
-    + '<p>' + sicher(f.frage) + '</p>'
-    + '<div class="warum">' + sicher(f.warum) + '</div>'
-    + '<form><input placeholder="Antwort…" autocomplete="off">'
-    + '<button type="submit">Merken</button></form></div>'
-  ).join('');
-
-  for (const kasten of document.querySelectorAll('.frage')) {
-    kasten.querySelector('form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const feld = kasten.querySelector('input');
-      const antwort = feld.value.trim();
-      if (!antwort) return;
-
-      const frage = kasten.querySelector('p').textContent;
-      feld.disabled = true;
-
-      const r = await fetch('/api/antwort', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ frage, antwort, id: kasten.dataset.id }),
-      }).then((x) => x.json()).catch(() => ({ ok: false }));
-
-      if (r.ok) {
-        erledigt.add(kasten.dataset.id);
-        kasten.classList.add('fertig');
-        kasten.querySelector('form').innerHTML = '<span class="leise">Gemerkt.</span>';
-      } else {
-        feld.disabled = false;
-        kasten.querySelector('.warum').textContent = 'Hat nicht geklappt: ' + (r.reason || 'unbekannt');
-      }
-    });
-  }
-}
+// Fragen kommen seit frage-erinnerung.js per echter DM statt hier im
+// Dashboard - keine Kachel, keine Zeichenfunktion mehr noetig.
 
 const SCHALTER_GRUPPEN = [
   ['Event & Chat', [['eventScheduler', 'Event-Scheduler'], ['terminErinnerungen', 'Termin-Erinnerungen'], ['chat', 'Ghostxx-Chat'], ['commands', 'Alle Commands']]],
@@ -907,7 +844,6 @@ async function laden() {
       ? d.bilder.wartend + ' Bilder in der Schlange'
       : 'alles erledigt');
 
-  zeichneFragen(d.fragen);
   $('stand').textContent = 'Stand ' + new Date(d.zeit).toLocaleTimeString('de-DE');
   $('laufzeit').textContent = 'läuft seit ' + d.system.laufzeit;
   $('leiste').innerHTML = zeichneLeiste(d.system);

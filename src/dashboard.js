@@ -2,7 +2,6 @@ const http = require('node:http');
 const path = require('node:path');
 const { config } = require('./config');
 const { stand } = require('./dashboard-daten');
-const { beantworte } = require('./ghostxx-fragen');
 const { seite } = require('./dashboard-seite');
 const { setzePause } = require('./bild-vorablesen');
 const { istAn, setzeSchalter } = require('./steuerung');
@@ -40,29 +39,13 @@ function startDashboard(client) {
         return;
       }
 
-      // Der einzige Weg, auf dem etwas ZURUECK geht. Nur von diesem Rechner
-      // erreichbar, und er kann genau eins: eine Antwort ins Gedaechtnis legen.
-      if (req.url === '/api/antwort' && req.method === 'POST') {
-        const roh = await new Promise((fertig) => {
-          let daten = '';
-          req.on('data', (stueck) => {
-            daten += stueck;
-            if (daten.length > 4000) req.destroy();
-          });
-          req.on('end', () => fertig(daten));
-        });
+      // Frueher gab es hier /api/antwort: eine Antwort auf eine offene Frage
+      // ins Gedaechtnis legen. Ersetzt durch echte DMs (frage-erinnerung.js) -
+      // Kevin antwortet jetzt direkt in Discord, nicht mehr im Dashboard.
 
-        const { frage, antwort, id } = JSON.parse(roh || '{}');
-        const ergebnis = await beantworte(frage, antwort, config.ownerId, id);
-
-        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-        res.end(JSON.stringify(ergebnis));
-        return;
-      }
-
-      // Zweiter schreibender Weg, ganz bewusst neben /api/antwort: hier kann
-      // NUR das Bildlesen an- oder ausgeschaltet werden, Chat und Events
-      // haengen nicht dran. Kein Text, kein Freitext - ein Knopf, ein Zustand.
+      // Einziger verbliebener schreibender Weg: hier kann NUR das Bildlesen
+      // an- oder ausgeschaltet werden, Chat und Events haengen nicht dran.
+      // Kein Text, kein Freitext - ein Knopf, ein Zustand.
       if (req.url === '/api/bilder-pause' && req.method === 'POST') {
         const roh = await new Promise((fertig) => {
           let daten = '';

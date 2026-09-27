@@ -17,6 +17,7 @@ const { startPraesenz } = require('./praesenz');
 const { startDashboard } = require('./dashboard');
 const { startTerminErinnerung } = require('./termin-erinnerung');
 const { startSelbstverbesserung } = require('./selbstverbesserung');
+const { startFrageErinnerung } = require('./frage-erinnerung');
 const { registerBildVorablesen } = require('./bild-vorablesen');
 const { registerFamilienListe } = require('./familien-liste');
 const { isReachable, pickModel, warmUp } = require('./ollama');
@@ -127,6 +128,12 @@ async function main() {
       // Dashboard-Schalter "selbstverbesserung" standardmaessig auf AUS -
       // erst nach Kevins Handpruefung laeuft hier ueberhaupt etwas.
       startSelbstverbesserung(readyClient);
+
+      // Ersetzt die alte "Er fragt"-Dashboard-Kachel: hoechstens eine offene
+      // Frage (Ticket ohne Besitzer, Event ohne Auszahlungssatz) alle paar
+      // Stunden per echter DM, statt einer Liste zum Anklicken. Antwort per
+      // simpler DM-Nachricht zurueck, siehe message-handler.js.
+      startFrageErinnerung(readyClient);
 
       // Ollama darf nicht blockieren: laeuft es nicht, funktionieren Events,
       // Slash-Commands und Logging trotzdem weiter. Nur das freie Chatten faellt aus.

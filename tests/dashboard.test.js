@@ -129,6 +129,10 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   check('ruft den eigenen Weg auf, nicht /api/antwort', html.includes('/api/bilder-pause'));
   check('Knopf-Text sagt, was ein Klick als naechstes tut', html.includes('Bildlesen pausieren') && html.includes('Bildlesen fortsetzen'));
 
+  section('"Er fragt"-Kachel ist raus (ersetzt durch DM, siehe frage-erinnerung.js)');
+  check('kein /api/antwort mehr in der Seite', !html.includes('/api/antwort'));
+  check('keine Fragen-Kachel mehr', !html.includes('karte-fragen'));
+
   section('Bestand und Chronik sind zweierlei');
   // Kevins Rechnung ging nicht auf: 80 Bilder in den Tickets, aber 82 gelesen,
   // 4 unlesbar und 8 in der Schlange. Drei Toepfe unter einer Ueberschrift.
@@ -204,6 +208,9 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   check('selbstverbesserung-Feld vorhanden', Boolean(stand2.selbstverbesserung));
   check('Heutige Laeufe ist eine Zahl', typeof stand2.selbstverbesserung.heutigeLaeufe === 'number');
   check('Letzter Eintrag sichtbar', stand2.selbstverbesserung.letzteEintraege.some((e) => e.titel === 'Dashboard-Testproblem'));
+
+  section('Offene Fragen kommen nicht mehr ueber das Dashboard (siehe frage-erinnerung.js)');
+  check('kein fragen-Feld mehr in stand()', !('fragen' in stand2));
 
   temp.cleanup();
   finish();

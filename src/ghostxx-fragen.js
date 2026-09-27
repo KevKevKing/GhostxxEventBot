@@ -8,6 +8,7 @@ const { alleTickets, personZuTicket } = require('./logbuch-tickets');
 const { EVENTS } = require('./logbook-events');
 const { satzFuer } = require('./auszahlung-saetze');
 const { normalizeText } = require('./text-match');
+const { chat } = require('./ollama');
 
 // Was Ghostxx nicht weiss - und woran man es merkt.
 //
@@ -18,6 +19,13 @@ const { normalizeText } = require('./text-match');
 //
 // Die Antwort landet im Gedaechtnis - dasselbe, das im Zuhause-Kanal gefuellt
 // wird. Nur eben gezielt statt zufaellig.
+//
+// Eine dritte, fruehere Kategorie (unbekannte Rollen/Kanaele, z.B. "Wofuer ist
+// die Rolle '3 Probe' da?") gibt es nicht mehr als Frage: Kevin fand das zu
+// simpel geraten fuer Namen, die sich selbst erklaeren. Stattdessen versucht
+// Ghostxx jetzt selbst zu verstehen (siehe versucheUmgebungZuVerstehen unten)
+// und fragt bei diesen beiden nie mehr nach - weder im Dashboard (das gibt es
+// dafuer nicht mehr) noch per DM.
 
 /**
  * Woran erkennt man, dass etwas fehlt?
@@ -95,49 +103,6 @@ async function offeneFragen(client) {
     });
   }
 
-  // 3. Seine Umgebung.
-  //
-  // Er sieht Rollen und Kanaele, weiss aber nicht, wofuer sie da sind. Das
-  // Thema wird hier FEST gefunden - eine echte Rolle, ein echter Kanal - und
-  // nicht vom Sprachmodell erfunden. Sonst fragt er nach Dingen, die es nicht
-  // gibt, und das faellt beim dritten Mal auf.
-  //
-  // Hoechstens zwei davon gleichzeitig. Wer zehn Fragen auf einmal sieht,
-  // beantwortet keine.
-  if (guild) {
-    const umgebung = [];
-
-    const rollen = [...guild.roles.cache.values()]
-      .filter((r) => !r.managed && r.id !== guild.id && r.members.size >= 3)
-      .sort((a, b) => b.members.size - a.members.size);
-
-    for (const rolle of rollen) {
-      if (umgebung.length >= 1) break;
-      if (schonBeantwortet(rolle.name)) continue;
-      umgebung.push({
-        id: `rolle:${rolle.id}`,
-        frage: `Wofür ist die Rolle "${rolle.name}" da?`,
-        warum: `${rolle.members.size} Leute haben sie, und ich weiß nicht, was sie bedeutet.`,
-      });
-    }
-
-    const kanaele = [...guild.channels.cache.values()]
-      .filter((c) => c.type === ChannelType.GuildText && !config.logbookTicketCategoryIds.includes(c.parentId))
-      .sort((a, b) => a.name.localeCompare(b.name, 'de'));
-
-    for (const kanal of kanaele) {
-      if (umgebung.length >= 2) break;
-      if (schonBeantwortet(kanal.name)) continue;
-      umgebung.push({
-        id: `kanal:${kanal.id}`,
-        frage: `Was gehört in den Kanal "${kanal.name}"?`,
-        warum: 'Ich sehe ihn, weiß aber nicht, wofür er gedacht ist.',
-      });
-    }
-
-    fragen.push(...umgebung);
-  }
-
   // Beantwortete fliegen raus - erst hier, damit die Zaehlung oben (nur zwei
   // Umgebungsfragen gleichzeitig) sich nicht dauernd verschiebt.
   //
@@ -156,6 +121,121 @@ function stehtImGedaechtnis(frage, bekannt) {
   const anfang = normalizeText(String(frage || '').replace(/\?$/, '')).trim();
   if (anfang.length < 10) return false;
   return bekannt.some((satz) => satz.startsWith(anfang));
+}
+
+// Marker, mit dem das Modell antwortet, wenn es sich NICHT sicher genug ist.
+// Grossgeschrieben und einzeln geprueft (nicht als Teil eines Satzes), damit
+// ein Modell, das trotzdem drumherum redet, nicht versehentlich als "sicher"
+// durchgeht.
+const UNSICHER_MARKER = 'UNBEKANNT';
+
+function baueRatePrompt(art, name) {
+  const gegenstand = art === 'rolle' ? 'eine Discord-Rolle' : 'einen Discord-Kanal';
+  const pronomen = art === 'rolle' ? 'sie' : 'er';
+  return `Auf einem deutschen GTA-Rollenspiel-Server (Familie "Unknown") gibt es `
+    + `${gegenstand} namens "${name}". Laesst sich allein aus dem Namen mit `
+    + `ausreichender Sicherheit ableiten, wofuer ${pronomen} vermutlich da ist? `
+    + `Wenn ja: antworte in einem kurzen Satz auf Deutsch, was du vermutest. `
+    + `Wenn du dir nicht wirklich sicher bist, antworte NUR mit dem Wort ${UNSICHER_MARKER}.`;
+}
+
+/**
+ * Versucht, eine Rolle/einen Kanal allein am Namen zu verstehen - statt wie
+ * frueher bei jedem unbekannten Namen nachzufragen (siehe Modulkommentar
+ * oben). Wirft nie: ein Ollama-Fehler bedeutet einfach "nicht verstanden",
+ * keinen Absturz der aufrufenden Schleife.
+ *
+ * @returns {Promise<string|null>} die Vermutung, oder null wenn keine sichere
+ *   Vermutung moeglich war.
+ */
+async function versucheZuVerstehen(art, name, { chatFn = chat } = {}) {
+  try {
+    const ergebnis = await chatFn({
+      messages: [{ role: 'user', content: baueRatePrompt(art, name) }],
+      temperature: 0.2,
+      numPredict: 80,
+    });
+    if (!ergebnis?.ok) return null;
+
+    const text = String(ergebnis.content || '').trim();
+    if (!text || text.toUpperCase().includes(UNSICHER_MARKER)) return null;
+    return text;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Geht die Umgebung durch (Rollen/Kanaele, die er noch nicht kennt) und
+ * versucht JEDEN davon selbst zu verstehen statt zu fragen. Eine sichere
+ * Vermutung landet direkt im Gedaechtnis, alles andere verfaellt einfach -
+ * es gibt seit der Dashboard-Kachel-Entfernung keinen Ort mehr, an dem eine
+ * solche Frage angezeigt werden koennte.
+ *
+ * Bewusst auf hoechstens zwei Namen pro Aufruf begrenzt (ein Ollama-Aufruf
+ * pro Name) - das laeuft im selben gedrosselten Takt wie die DM-Erinnerung
+ * (siehe frage-erinnerung.js), nicht bei jedem Dashboard-Refresh wie frueher.
+ */
+async function versucheUmgebungZuVerstehen(client, { versuchen = versucheZuVerstehen } = {}) {
+  const guild = client?.guilds?.cache?.get(config.guildId);
+  if (!guild) return { versucht: 0, gelernt: 0 };
+
+  const gewusst = await knowledge.list().catch(() => []);
+  const bekannt = gewusst.map((f) => normalizeText(f.text));
+  const schonBeantwortet = (stichwort) => bekannt.some((t) => t.includes(normalizeText(stichwort)));
+
+  let versucht = 0;
+  let gelernt = 0;
+
+  const rollen = [...guild.roles.cache.values()]
+    .filter((r) => !r.managed && r.id !== guild.id && r.members.size >= 3)
+    .sort((a, b) => b.members.size - a.members.size);
+
+  for (const rolle of rollen) {
+    if (versucht >= 1) break;
+    if (schonBeantwortet(rolle.name)) continue;
+    versucht += 1;
+    const vermutung = await versuchen('rolle', rolle.name);
+    if (!vermutung) continue;
+    const ergebnis = await knowledge.remember(`Rolle "${rolle.name}": ${vermutung}`, 'ghostxx-selbst').catch(() => null);
+    if (ergebnis?.ok) gelernt += 1;
+  }
+
+  const kanaele = [...guild.channels.cache.values()]
+    .filter((c) => c.type === ChannelType.GuildText && !config.logbookTicketCategoryIds.includes(c.parentId))
+    .sort((a, b) => a.name.localeCompare(b.name, 'de'));
+
+  for (const kanal of kanaele) {
+    if (versucht >= 2) break;
+    if (schonBeantwortet(kanal.name)) continue;
+    versucht += 1;
+    const vermutung = await versuchen('kanal', kanal.name);
+    if (!vermutung) continue;
+    const ergebnis = await knowledge.remember(`Kanal "${kanal.name}": ${vermutung}`, 'ghostxx-selbst').catch(() => null);
+    if (ergebnis?.ok) gelernt += 1;
+  }
+
+  return { versucht, gelernt };
+}
+
+// Welche Frage wurde einer Person zuletzt per DM gestellt - damit ihre
+// naechste DM-Antwort ohne Befehl/Format als Antwort darauf zaehlt (siehe
+// message-handler.js). Bewusst im Speicher, nicht auf Platte: geht beim
+// Neustart verloren, dann wird die naechste DM einfach wieder normaler Chat -
+// kein Datenverlust, nur eine verpasste Zuordnung im seltenen Fall.
+const gestellteFragen = new Map();
+
+function merkeGestellt(userId, frage) {
+  if (!userId || !frage) return;
+  gestellteFragen.set(userId, frage);
+}
+
+function holeGestellte(userId) {
+  return gestellteFragen.get(userId) || null;
+}
+
+function loescheGestellte(userId) {
+  gestellteFragen.delete(userId);
 }
 
 /**
@@ -181,4 +261,14 @@ async function beantworte(frage, antwort, userId = '', id = '') {
   return ergebnis;
 }
 
-module.exports = { beantworte, beantworteteFragen, merkeBeantwortet, offeneFragen };
+module.exports = {
+  beantworte,
+  beantworteteFragen,
+  holeGestellte,
+  loescheGestellte,
+  merkeBeantwortet,
+  merkeGestellt,
+  offeneFragen,
+  versucheUmgebungZuVerstehen,
+  versucheZuVerstehen,
+};

@@ -26,6 +26,7 @@ const { behandleSkMeldung } = require('./sk-meldung-anlegen');
 const { darfKommentieren, kommentiere, merkeKommentar } = require('./bild-kommentar');
 const { normalizeText } = require('./text-match');
 const { askOwner } = require('./ask-owner');
+const { beantworte, holeGestellte, loescheGestellte } = require('./ghostxx-fragen');
 const {
   answerCapabilityQuestion,
   answerHerkunft,
@@ -640,6 +641,25 @@ async function handleMessage(message, client) {
   if (!isDm && message.guildId !== config.guildId) return;
 
   const text = (message.content || '').replace(new RegExp(`<@!?${botId}>`, 'g'), '').trim();
+
+  // Antwort auf eine per DM gestellte Frage (siehe frage-erinnerung.js):
+  // die naechste DM von Kevin nach einer Frage zaehlt ohne Befehl/Format als
+  // deren Antwort. Nur in DMs und nur fuer den Besitzer selbst - sonst
+  // koennte irgendwer per DM Wissen unterschieben, das wie eine Antwort auf
+  // Kevins Frage aussieht.
+  if (isDm && text && message.author.id === config.ownerId) {
+    const gestellte = holeGestellte(message.author.id);
+    if (gestellte) {
+      const ergebnis = await beantworte(gestellte.frage, text, message.author.id, gestellte.id);
+      if (ergebnis.ok) {
+        loescheGestellte(message.author.id);
+        await reply(message, 'Gemerkt.');
+      } else {
+        await reply(message, `Hat nicht geklappt (${ergebnis.reason || 'unbekannt'}) — nochmal?`);
+      }
+      return;
+    }
+  }
 
   // Paesse: das Bild kann an dieser Nachricht haengen oder an der, auf die
   // geantwortet wurde ("Ghost was sagst du zu dem?").
