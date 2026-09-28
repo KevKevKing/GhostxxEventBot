@@ -101,10 +101,18 @@ laufende Sammelauszahlung, was er in Discord tut, Terminal, Grafikkarte, Fehler,
 Warnungen. Ghostxx als leuchtender Kern in der Mitte — dreht grün und schnell,
 solange wirklich eine Ollama-Anfrage läuft.
 
-Zwei schreibende Wege, beide bewusst eng gefasst: `POST /api/antwort` legt eine
-Antwort auf eine seiner Fragen ins Gedächtnis, `POST /api/bilder-pause` schaltet
-nur das Bildlesen an oder aus (Chat und Events laufen unabhängig davon weiter).
-Sonst liest das Dashboard nur.
+Ein einziger schreibender Weg, bewusst eng gefasst: `POST /api/bilder-pause`
+schaltet nur das Bildlesen an oder aus (Chat und Events laufen unabhängig davon
+weiter). Sonst liest das Dashboard nur.
+
+Offene Fragen (Ticket ohne erkennbaren Besitzer, Event ohne Auszahlungssatz)
+zeigt das Dashboard nicht mehr an — die frühere "Er fragt"-Kachel samt
+`POST /api/antwort` ist raus. Stattdessen bekommt Kevin höchstens eine alle
+paar Stunden per echter Discord-DM (`frage-erinnerung.js`) und antwortet mit
+normalem Text direkt in der DM zurück. Unbekannte Rollen/Kanalnamen (z.B.
+"3 Probe") fragt Ghostxx gar nicht mehr — er lässt zuerst Ollama selbst raten
+und merkt sich eine plausible Vermutung still, statt nachzufragen
+(`ghostxx-fragen.js`, `versucheUmgebungZuVerstehen`).
 
 Die Höhen stehen in `vh`, damit auf 1920×1080 alles auf eine Seite passt.
 
@@ -121,6 +129,7 @@ auch das Nützliche weg.
 | Anmeldung war schnell voll | `voll-kommentar.js` | 3/Tag, nur unter 5 Min |
 | Bild im Chat | `bild-kommentar.js` | alle 10 Min, 8/Tag, nie bei voller GPU |
 | 25 Min vor selbst erstelltem Event | `termin-erinnerung.js` | einmal je Event |
+| Offene Frage (Ticket-Besitzer, Auszahlungssatz) per DM | `frage-erinnerung.js` | alle 6h höchstens eine |
 
 Nachts (2–10 Uhr) sagt er nichts.
 

@@ -8,7 +8,6 @@ const {
   getFreeVramMb, getFreiOhneEigeneMb, isReachable, letzteAnfragen, rechnetGerade,
 } = require('./ollama');
 const { systemWerte } = require('./system-werte');
-const { offeneFragen } = require('./ghostxx-fragen');
 const { alleGelesenen } = require('./bild-gedaechtnis');
 const { fortschritt } = require('./bild-vorablesen');
 const { letzteAktivitaet, letzteFehler } = require('./logger');
@@ -363,7 +362,6 @@ async function stand(client) {
     system: await systemWerte(client),
     anfragen: letzteAnfragen(),
     rechnet: rechnetGerade(),
-    fragen: await offeneFragen(client).catch(() => []),
     kontext: config.ollamaNumCtx,
     bilder: {
       ...(await fortschritt().catch(() => ({ wartend: 0, gelesen: 0, gescheitert: 0 }))),
