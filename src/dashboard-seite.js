@@ -202,7 +202,6 @@ const HTML = String.raw`<!doctype html>
   .chatformular { display: flex; gap: 7px; margin-top: 8px; }
   .chatformular input { min-width: 0; flex: 1; background: #0a111a; color: var(--text); border: 1px solid var(--rand); border-radius: 5px; padding: 8px; }
   .chatformular button { background: var(--akzent); color: #07121b; border: 0; border-radius: 5px; padding: 8px 12px; cursor: pointer; font-weight: 700; }
-  .breit { grid-column: 1 / -1; }
 
   /* Terminal-Overlay statt Dauerkarte im Hauptbild - Kevins Wunsch: Debug-Zeug
      nicht staendig sichtbar, aber einen Klick entfernt. */
@@ -247,7 +246,7 @@ const HTML = String.raw`<!doctype html>
           font-family: Consolas, ui-monospace, monospace; }
   .marke { display: inline-block; padding: 1px 7px; border-radius: 20px;
            font-size: 11px; border: 1px solid var(--rand); color: var(--leise); }
-  .m-angriff, .m-verteidigung { color: #ffb08a; border-color: #6b3520; background: rgba(255,140,80,.08); }
+  .m-angriff { color: #ffb08a; border-color: #6b3520; background: rgba(255,140,80,.08); }
   .m-selbst { color: #c4a2ff; border-color: #4a2f6b; background: rgba(160,110,255,.08); }
   .marke.gut { color: var(--gut); border-color: #1f4d34; background: rgba(53,224,138,.08); }
   .marke.warn { color: var(--warn); border-color: #5a4712; background: rgba(240,180,41,.08); }
@@ -287,14 +286,10 @@ const HTML = String.raw`<!doctype html>
   .tat.create b { color: var(--gut); }
   .tat.delete b, .tat.error b { color: var(--schlecht); }
   .tat.update b { color: var(--akzent); }
-  .bald { color: var(--akzent); }
   tr.dran td { background: rgba(53,224,138,.10); color: #dff7e9; }
   tr.dran td:first-child { border-left: 2px solid var(--gut); padding-left: 6px; }
   .zeiger { color: var(--gut); animation: pochen 1.6s ease-in-out infinite; }
   @keyframes pochen { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
-  .sprung { color: var(--akzent); text-decoration: none;
-            border-bottom: 1px dotted rgba(34,211,238,.45); }
-  .sprung:hover { color: #7ee7f5; border-bottom-style: solid; }
   /* Was er nicht erkannt hat, soll ins Auge fallen - das ist das, wo jemand
      draufschauen muss. */
   .tat.offen { border-left: 2px solid var(--warn); padding-left: 8px;
@@ -498,7 +493,7 @@ function zeichneLeiste(s, bilder) {
       + '</button>');
   }
 
-  teile.push('<button id="term-knopf" class="mini-knopf neutral" title="Terminal-Log anzeigen">▤ Terminal</button>');
+  teile.push('<button id="term-knopf" class="mini-knopf" title="Terminal-Log anzeigen">▤ Terminal</button>');
   teile.push('<button id="neustart-knopf" class="mini-knopf" title="Bot manuell neustarten - dauert ca. 15-20 Sekunden">↻ Neustart</button>');
   teile.push('<button id="aus-knopf" class="mini-knopf" title="Bot komplett ausschalten - Watchdog und Windows-Autostart warten dann, bis er wieder eingeschaltet wird">⏻ Ausschalten</button>');
   teile.push('<div class="uhr">' + new Date().toLocaleTimeString('de-DE') + '</div>');
