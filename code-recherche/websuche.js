@@ -10,6 +10,16 @@
 // {ok, grund}-Rueckgabe wie die uebrigen Module in diesem Projekt: darf nie
 // werfen, auch nicht bei einem synchronen Fehler in einer injizierten
 // abrufen()-Funktion.
+//
+// Tavily antwortet auf Englisch. Die Antwort wird deshalb ueber das lokale
+// Ollama (uebersetzung.js) ins Deutsche uebersetzt, bevor sie zurueckkommt -
+// siehe README, offene Frage "englische Antwort uebersetzen oder stehen
+// lassen" ist damit beantwortet: uebersetzen. Schlaegt NUR die Uebersetzung
+// fehl (Tavily selbst hat funktioniert), kommt trotzdem ein Ergebnis zurueck -
+// eben auf Englisch, mit einem Vermerk. Lieber eine englische Antwort als
+// gar keine.
+
+const { uebersetzeInsDeutsche } = require('./uebersetzung');
 
 const ENDPUNKT = 'https://api.tavily.com/search';
 const ZEITLIMIT_MS = 8000;
@@ -28,7 +38,7 @@ async function echtAbrufen(anfrage) {
   return { status: antwort.status, daten };
 }
 
-async function sucheCode(anfrage, { abrufen = echtAbrufen } = {}) {
+async function sucheCode(anfrage, { abrufen = echtAbrufen, uebersetzen = uebersetzeInsDeutsche } = {}) {
   try {
     if (!anfrage || typeof anfrage !== 'string' || !anfrage.trim()) {
       return { ok: false, grund: 'leere_anfrage' };
@@ -50,10 +60,13 @@ async function sucheCode(anfrage, { abrufen = echtAbrufen } = {}) {
       return { ok: false, grund: 'keine_antwort_gefunden' };
     }
 
+    const uebersetzt = await uebersetzen(text).catch(() => null);
+
     return {
       ok: true,
-      text,
+      text: uebersetzt?.ok ? uebersetzt.text : text,
       quelle: ersterTreffer?.url || '',
+      original: uebersetzt?.ok ? text : undefined,
     };
   } catch {
     return { ok: false, grund: 'unerwarteter_fehler' };

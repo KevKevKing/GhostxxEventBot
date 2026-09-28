@@ -17,7 +17,12 @@ bereits angebunden.
 ## Was es tut
 
 `sucheCode(anfrage)` fragt die Tavily-Such-API ab (`websuche.js`, braucht
-`TAVILY_API_KEY` in `.env`).
+`TAVILY_API_KEY` in `.env`) und uebersetzt die Antwort danach automatisch
+ins Deutsche, ueber dasselbe lokale Ollama wie der Discord-Bot
+(`uebersetzung.js`, kein neues Modell, keine neuen Kosten). Schlaegt nur die
+Uebersetzung fehl, kommt trotzdem ein Ergebnis zurueck - dann eben auf
+Englisch (`text` = Original, kein `original`-Feld). Klappt sie, steht im
+`original`-Feld zusaetzlich der englische Ausgangstext.
 
 **Wechsel-Historie:** zuerst mit DuckDuckGos Instant-Answer-API gebaut (kein
 Konto noetig) - gemessener Befund: gut fuer Lexikon-Begriffe ("Node.js"), aber
@@ -63,13 +68,29 @@ Variablen vor Gebrauch initialisieren), plus Quelle:
 **Damit ist die technische Machbarkeit gezeigt** - Tavily beantwortet genau
 den Fall, an dem die schluessellose Variante gescheitert ist.
 
+## Gemessener Befund: Uebersetzung funktioniert, aber nicht fehlerfrei
+
+Echter End-zu-End-Testlauf (Tavily-Suche + lokale Ollama-Uebersetzung, nicht
+gemockt), Frage `"React useEffect cleanup function"`:
+
+> Die Cleanup-Funktion von `useEffect` in React entfernt Seiteneffekte vor
+> dem Abmounten des Components oder vor einem Neudarm, verhindert
+> Speicherlecks und optimiert die Leistung. [...]
+
+Inhaltlich richtig und verstaendlich - aber "Neudarm" ist ein Modell-
+Ausrutscher (gemeint: "erneutem Rendern"/Re-Render). Ehrlich hier notiert,
+nicht schoengeredet: die Uebersetzung ist brauchbar, aber nicht
+korrekturfrei. Fuer einen ernsthaften Einsatz waere zu pruefen, ob ein
+staerkeres Modell (`qwen3.5:9b` ist bereits das grosse Chat-Modell) oder ein
+Korrekturdurchgang das verbessert - beides nicht getestet.
+
 ## Offene Fragen, bevor daraus mehr wird
 
 - Wo waere der feste Parser ("erst ablesen, dann raten"), der entscheidet,
   wann ueberhaupt nachgeschlagen wird?
 - Soll das in den normalen Chat (`ollama.js`) oder nur in
   Selbstverbesserungs-Sessions einfliessen?
-- Wie wird eine englische Tavily-Antwort im deutschsprachigen Chat
-  eingebaut - uebersetzen lassen, oder als Zitat stehen lassen?
+- Reicht die Uebersetzungsqualitaet so, oder braucht es einen
+  Korrekturschritt?
 
 Das sind Kevins Entscheidungen, keine technischen.

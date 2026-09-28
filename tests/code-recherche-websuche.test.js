@@ -25,16 +25,23 @@ async function haupt() {
   // wird also nie wirklich an Tavily geschickt.
   process.env.TAVILY_API_KEY = 'test-schluessel';
 
-  section('Erfolgreiche Antwort ueber "answer"');
+  // Ab hier immer eine gefaelschte uebersetzen()-Funktion mitgeben - sonst
+  // wuerde jeder Testlauf einen echten Ollama-Aufruf machen (langsam, und
+  // schlaegt fehl, wenn gerade kein Ollama laeuft).
+  const keineUebersetzung = async () => ({ ok: false, grund: 'nicht_gebraucht_im_test' });
+
+  section('Erfolgreiche Antwort ueber "answer" (Uebersetzung schlaegt fehl -> Original bleibt)');
   const erfolg = await sucheCode('node.js readFileSync', {
     abrufen: async () => ({
       status: 200,
       daten: { answer: 'Liest eine Datei synchron.', results: [{ url: 'https://example.com/fs', content: '...' }] },
     }),
+    uebersetzen: keineUebersetzung,
   });
   check('ok', erfolg.ok);
-  equal('Text', erfolg.text, 'Liest eine Datei synchron.');
+  equal('Text (englisches Original, da Uebersetzung fehlschlug)', erfolg.text, 'Liest eine Datei synchron.');
   equal('Quelle', erfolg.quelle, 'https://example.com/fs');
+  equal('kein original-Feld, wenn nicht uebersetzt wurde', erfolg.original, undefined);
 
   section('Erfolgreiche Antwort nur ueber Trefferliste (kein "answer")');
   const nurTreffer = await sucheCode('seltene frage', {
@@ -42,9 +49,19 @@ async function haupt() {
       status: 200,
       daten: { results: [{ url: 'https://example.com/x', content: 'Trefferinhalt.' }] },
     }),
+    uebersetzen: keineUebersetzung,
   });
   check('ok', nurTreffer.ok);
   equal('Text aus Trefferliste', nurTreffer.text, 'Trefferinhalt.');
+
+  section('Antwort wird ins Deutsche uebersetzt, wenn die Uebersetzung klappt');
+  const uebersetzt = await sucheCode('node.js readFileSync', {
+    abrufen: async () => ({ status: 200, daten: { answer: 'Reads a file synchronously.', results: [] } }),
+    uebersetzen: async (text) => ({ ok: true, text: `[DE] ${text}` }),
+  });
+  check('ok', uebersetzt.ok);
+  equal('deutscher Text', uebersetzt.text, '[DE] Reads a file synchronously.');
+  equal('Original mitgeliefert', uebersetzt.original, 'Reads a file synchronously.');
 
   section('Keine Antwort gefunden');
   const leer = await sucheCode('etwas ganz obskures', {
