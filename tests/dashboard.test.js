@@ -123,9 +123,26 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   check('hat alle Bereiche', ['anmeldungen', 'logbuch', 'lauf', 'fehler', 'warnungen', 'steuerung',
     'terminal', 'aktivitaet', 'leiste', 'ring']
     .every((id) => html.includes(`id="${id}"`)));
+  check('Telemetrie-Kachel vorhanden', html.includes('id="telemetrie"'));
   // Die "Bilder — was er gelesen hat"-Kachel (id="bilder") ist raus, siehe
   // "Er fragt"-Abschnitt unten - der Pausieren-Knopf lebt jetzt in "leiste".
   check('keine eigene Bilder-Kachel mehr', !html.includes('id="bilder"'));
+  check('neue Design-Grundlage geladen', html.includes('Unbounded') && html.includes('--ion'));
+  check('drei benannte Spalten statt generischer .spalte', html.includes('spalte-links') && html.includes('spalte-mitte') && html.includes('spalte-rechts'));
+
+  section('Karten in den richtigen Spalten');
+  const posSteuerung = html.indexOf('id="steuerung"');
+  const posChat = html.indexOf('id="chatformular"');
+  const posReaktor = html.indexOf('id="coreCanvas"');
+  const posAnmeldungen = html.indexOf('id="anmeldungen"');
+  check('Steuerung vor dem Reaktor (spalte-links vor spalte-mitte)', posSteuerung > 0 && posSteuerung < posReaktor);
+  check('Chat nach dem Reaktor und vor Anmeldungen (Reaktor und Chat in spalte-mitte, Anmeldungen in spalte-rechts)', posReaktor < posChat && posChat < posAnmeldungen);
+  check('Anmeldungen NACH dem Reaktor (jetzt rechte Spalte)', posAnmeldungen > posReaktor);
+
+  section('GHOST-Reaktor');
+  check('GHOST-Reaktor als Canvas', html.includes('id="coreCanvas"'));
+  check('Reaktor-Zustandstext', html.includes('id="coreState"'));
+  check('alter SVG-Kern ist raus', !html.includes('class="adern"'));
 
   section('Pause-Knopf fuers Bildlesen');
   // Kevins eigener Knopf: nur das Bildlesen haelt an, Chat und Events nicht.
@@ -138,7 +155,9 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
 
   section('Ruhebildschirm');
   // Seit 20.08.: Kevins eigenes Waldfoto (ChatGPT) als Daten-URI statt
-  // Sternenhimmel - immer noch eine einzige Datei, laedt nichts nach.
+  // Sternenhimmel - immer noch eine einzige Datei, das Foto selbst laedt
+  // nichts nach (die Google-Fonts-Links im <head> sind seit der neuen
+  // Design-Grundlage die eine bewusste Ausnahme, siehe unten).
   // Der Regen wird einmal gestreut und danach nur von CSS bewegt, kein
   // Zeitgeber, keine Schleife.
   check('gibt es', html.includes('id="ruhe"'));
@@ -162,12 +181,18 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
 
   section('Hintergrund');
   // Der Ruhebildschirm hat seit 20.08. ein echtes Foto, als Daten-URI direkt
-  // im Skript - die Seite bleibt trotzdem eine einzige Datei und laedt
-  // nichts uebers Netz nach. Der Rest (Dashboard-Nebel, Raster) ist CSS.
-  check('Nebelschleier', html.includes('@keyframes nebel'));
+  // im Skript - das Foto selbst laedt nichts uebers Netz nach. Der Rest
+  // (Dashboard-Tönung, Raster) ist CSS. Seit der Design-Grundlage (28.09.)
+  // laedt die Seite zusaetzlich Google Fonts per <link> nach - bewusst so
+  // gewollt, siehe CLAUDE.md; der Check unten prueft nur, dass CSS selbst
+  // keine externen url(...)-Ladepfade mehr enthaelt (Bilder/Fonts in CSS),
+  // nicht dass die Seite komplett offline waere. Und der Hintergrund ist
+  // seit der Design-Grundlage statisch statt animiert - die alte wandernde
+  // Nebelschleier-Animation samt eigenem reduced-motion-Schalter ist damit
+  // weg, nicht nur ersetzt.
+  check('Farbtönung im Hintergrund', html.includes('radial-gradient(900px 600px at 50% 18%'));
   check('Raster', html.includes('background-size: 32px 32px'));
-  check('kein externer Netzwerk-Ladepfad', !/url\(\s*['"]?https?:/i.test(html));
-  check('Rücksicht auf reduzierte Bewegung', html.includes('prefers-reduced-motion'));
+  check('kein externer Netzwerk-Ladepfad in CSS (Google Fonts im <head> sind die bewusste Ausnahme)', !/url\(\s*['"]?https?:/i.test(html));
 
   section('Echte Messwerte');
   // Nichts in der Statusleiste ist geschaetzt - was sich nicht auslesen
@@ -193,6 +218,9 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   // Namen und Spielernummern kommen aus Discord - die duerfen nicht als HTML
   // ausgefuehrt werden, nur angezeigt.
   check('maskiert fremden Text', html.includes('replace(/[<>&]/g'));
+
+  section('Statusleiste im neuen Stil');
+  check('Leiste nutzt die Mono-Schrift-Variable', html.includes('.leiste') && html.includes('var(--mono)'));
 
   section('Selbstverbesserung im Dashboard sichtbar');
   const gedaechtnis = require('../src/selbstverbesserung-gedaechtnis');
