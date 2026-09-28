@@ -327,6 +327,17 @@ Finde die Ursache und behebe sie mit einer moeglichst kleinen, fokussierten
 Aenderung. Halte dich an CLAUDE.md in diesem Projekt (Sprache, Konventionen,
 "messen nicht vermuten").
 
+## Hilfsmittel
+
+Wenn du zur Fehlerursache im Web nachschlagen willst (z.B. eine
+Fehlermeldung, eine Bibliotheksdokumentation), steht dir
+\`code-recherche/sucheCode(anfrage)\` zur Verfuegung (aus
+\`code-recherche/websuche.js\`, mit \`const { sucheCode } =
+require('./code-recherche/websuche')\`). Liefert bei Erfolg
+\`{ok:true, text, quelle}\` (deutsch uebersetzt), sonst \`{ok:false,
+grund}\` - wirft nie. Nutze es nur, wenn es der Fehlersuche wirklich hilft,
+nicht bei jedem Problem.
+
 ## Feste Grenzen (nicht verhandelbar)
 
 - Fasse NICHTS in Eventlogik, Zeitplaner oder Auszahlungscode an (u.a.
@@ -655,5 +666,9 @@ module.exports = {
   // haetten.
   echtAusfuehren,
   CLAUDE_PROMPT,
+  // Nur fuer den Regressionstest exportiert: dass der Hinweis auf
+  // code-recherche/sucheCode wirklich im Aufgabentext der Session steht,
+  // soll pruefbar bleiben, nicht nur im Kommentar behauptet werden.
+  baueAufgabe,
   starteSession,
 };
