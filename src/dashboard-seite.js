@@ -144,30 +144,20 @@ const HTML = String.raw`<!doctype html>
     100% { opacity: 0; transform: scale(1.04); }
   }
 
-  .pause-knopf { background: var(--karte2, #16202c); border: 1px solid var(--rand); color: var(--text);
-                 border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 12px;
-                 font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
-  .pause-knopf:hover { border-color: var(--akzent); }
-  .pause-knopf.aktiv { background: var(--warn); color: #241a04; border-color: var(--warn); }
-  /* Neustart-Knopf: bewusst rot/zurueckhaltend, mit eigener Bestaetigung im
-     Skript - das hier beendet den echten Prozess, kein Spielzeug. */
-  .mini-knopf { background: rgba(255,95,109,.08); border: 1px solid rgba(255,95,109,.4);
-                color: var(--schlecht); border-radius: 6px; padding: 4px 10px;
-                font: inherit; font-size: 11px; font-weight: 700; letter-spacing: .04em;
-                cursor: pointer; white-space: nowrap; }
-  .mini-knopf:hover { background: rgba(255,95,109,.18); }
-  .mini-knopf:disabled { opacity: .55; cursor: default; }
-  /* Neutrale Variante fuer harmlose Knoepfe wie "Terminal" - kein rot, das
-     ist Neustart vorbehalten. */
-  .mini-knopf.neutral { background: rgba(34,211,238,.08); border-color: rgba(34,211,238,.4); color: var(--akzent); }
-  .mini-knopf.neutral:hover { background: rgba(34,211,238,.18); }
+  .mini-knopf, .pause-knopf {
+    font: 500 11px/1 var(--mono); letter-spacing: .08em; padding: 8px 12px; border-radius: 6px;
+    border: 1px solid var(--rand2); background: var(--karte); color: var(--leise); cursor: pointer;
+  }
+  .mini-knopf:hover, .pause-knopf:hover { color: var(--text); border-color: var(--leiser); }
+  .pause-knopf.aktiv { color: var(--warn); border-color: rgba(255,179,92,.4); }
   /* Statusleiste unten - echte Messwerte, keine Zierde. */
-  .leiste { position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
-            display: flex; gap: 26px; align-items: center; flex-wrap: wrap;
-            padding: 10px 20px; background: rgba(6,13,24,.82);
-            backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-            border-top: 1px solid rgba(34,211,238,.14);
-            font-size: 12px; }
+  .leiste {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 5;
+    background: rgba(5,7,11,.92); backdrop-filter: blur(8px); border-top: 1px solid var(--rand);
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+    display: flex; gap: 22px; align-items: center; overflow-x: auto;
+    font: 400 11px var(--mono); color: var(--leiser); letter-spacing: .08em; white-space: nowrap;
+  }
   .mess { display: flex; align-items: center; gap: 8px; }
   .mess b { color: var(--leise); font-weight: 600; letter-spacing: .1em;
             text-transform: uppercase; font-size: 10px; }

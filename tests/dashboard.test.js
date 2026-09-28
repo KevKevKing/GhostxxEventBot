@@ -213,6 +213,9 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   // ausgefuehrt werden, nur angezeigt.
   check('maskiert fremden Text', html.includes('replace(/[<>&]/g'));
 
+  section('Statusleiste im neuen Stil');
+  check('Leiste nutzt die Mono-Schrift-Variable', html.includes('.leiste') && html.includes('var(--mono)'));
+
   section('Selbstverbesserung im Dashboard sichtbar');
   const gedaechtnis = require('../src/selbstverbesserung-gedaechtnis');
   await gedaechtnis.neuerEintrag({ titel: 'Dashboard-Testproblem', belege: [] });
