@@ -5,13 +5,24 @@
 Das Dashboard (`src/dashboard*.js`) bekommt einen komplett neuen Look nach
 einer Vorlage, die Kevin sich von einem anderen Chatbot generieren liess
 (`ghost-dashboard.html`, per Prompt + Referenz-Screenshot des heutigen
-Dashboards erzeugt, keine Vorlage aus dem Internet). Zusaetzlich bekommt das
-Dashboard einen echten, neuen Chat mit Ghostxx.
+Dashboards erzeugt, keine Vorlage aus dem Internet).
+
+**Korrektur gegenueber der ersten Fassung dieser Spec:** Darin stand
+faelschlich, das Dashboard bekaeme einen "neuen, dritten schreibenden Weg"
+fuer einen Chat. Das war ein Rechercheversuch, der eine bereits bestehende
+Kachel uebersehen hat: **"GhostxxCode — Coding-Helfer"** existiert bereits
+(`POST /api/chat` in `dashboard.js`, eigenes Modell `qwen2.5-coder:7b`, siehe
+Code-Kommentar dort "seit dem 16.09."), sitzt aktuell links neben
+"Steuerzentrale". Nach Ruecksprache mit Kevin: **keine neue Chat-Funktion,
+nur diese bestehende Kachel umziehen** - siehe "Coding-Helfer umziehen"
+unten. Dieser Abschnitt ersetzt den fruehereren "Der neue Chat"-Abschnitt
+vollstaendig.
 
 **Was sich NICHT aendert:** Modelle, Schalter, Datenquellen, Sicherheitsmodell
-(nur 127.0.0.1, nur lesend bis auf die inzwischen zwei schreibenden Wege).
-**Was sich aendert:** Optik komplett, Layout komplett, ein neuer dritter
-schreibender Weg (Chat).
+(nur 127.0.0.1), die schreibenden Wege (`/api/bilder-pause`, `/api/schalter`,
+`/api/chat` - alle drei bereits vorhanden, keiner davon neu).
+**Was sich aendert:** Optik komplett, Layout komplett - reine Anzeige- und
+Anordnungs-Aenderung, kein neues Backend-Verhalten.
 
 ## Ziel
 
@@ -23,17 +34,23 @@ schreibender Weg (Chat).
 - Alle heutigen echten Inhalte bleiben erhalten, werden aber neu einsortiert
   (die Vorlage hat nur Platz fuer wenige erfundene Beispielwerte, das echte
   Dashboard zeigt deutlich mehr).
-- Chat wandert in die Mitte (Kevins ausdruecklicher Wunsch, weicht von der
-  Vorlage ab, die ihn rechts zeigt).
-- Ein neuer, echter Chat mit Ghostxx direkt aus dem Dashboard - ueber
-  dasselbe lokale Ollama-Modell wie der Discord-Chat.
+- Die bestehende "GhostxxCode"-Kachel wandert in die Mitte, unter den
+  GHOST-Reaktor (Kevins ausdruecklicher Wunsch: "der Chat sollte mittig
+  sein" - weicht von der Vorlage ab, die ihren Chat rechts zeigt).
 
 ## Nicht-Ziele (bewusst ausgeklammert, siehe Brainstorming-Verlauf)
 
+- **Kein zweiter Chat.** Kevin ausdruecklich gefragt (siehe Korrektur oben):
+  "nur umziehen, kein zweiter chat" - die bestehende "GhostxxCode"-Kachel
+  wird verschoben und neu gestylt, nicht dupliziert, nicht durch einen
+  zweiten, allgemeinen Ghostxx-Chat ergaenzt.
+- **Keine Verhaltensaenderung am bestehenden Chat.** Modell
+  (`qwen2.5-coder:7b`), Systemprompt, Zeichenlimit (1200), fehlende
+  Anti-Spam-Bremse, fehlende Verlaufs-Persistenz uebers Neuladen hinaus -
+  alles bleibt exakt wie es ist. Nur Ort und Optik aendern sich.
 - **Kein externer KI-Anbieter.** Die Vorlage zeigt einen Umschalter zwischen
   "Claude" und "GPT" - das war Beiwerk des generierenden Chatbots, keine
-  Anforderung. Es bleibt bei genau einem, lokalen Modell (`ollama.js`,
-  dieselbe GPU-Auslastungs-Logik wie ueberall im Projekt).
+  Anforderung. Es bleibt bei den lokalen Ollama-Modellen wie bisher.
 - **Kein "Ghost Code"-Panel mit freiem Prompt fuer einen Coding-Agenten.**
   Die Vorlage zeigt ein Feld, in das man eine beliebige Programmieraufgabe
   eintippt und ein Agent aendert darufhin Dateien. Das waere eine
@@ -67,13 +84,15 @@ der Fall, muss der Implementierungsplan das nachbilden (keine neue
 ## Architektur
 
 Reines Frontend-Redesign (`dashboard-seite.js` komplett neu, `CSS`+`JS` aus
-der Vorlage als Ausgangspunkt) plus ein neues, kleines Backend-Stueck fuer
-den Chat. `dashboard-daten.js`s `stand()`-Funktion bleibt inhaltlich fast
-unveraendert - sie liefert weiterhin dieselben Felder (anmeldungen, logbuch,
-fehler, warnungen, system, selbstverbesserung, ...), nur die Darstellung
-aendert sich. Der GHOST-Reaktor bekommt weiterhin sein Signal aus
-`rechnetGerade()` (bereits vorhanden, zeigt ob gerade eine Ollama-Anfrage
-laeuft).
+der Vorlage als Ausgangspunkt). **Kein Backend-Stueck kommt neu dazu.**
+`dashboard-daten.js`s `stand()`-Funktion bleibt inhaltlich unveraendert - sie
+liefert weiterhin dieselben Felder (anmeldungen, logbuch, fehler, warnungen,
+system, selbstverbesserung, ...), nur die Darstellung aendert sich.
+`dashboard.js`s Endpunkte (`/api/stand`, `/api/chat`, `/api/bilder-pause`,
+`/api/schalter`, `/api/neustart`, `/api/aus`) bleiben alle unveraendert -
+die neue Seite ruft sie exakt so auf wie die alte. Der GHOST-Reaktor bekommt
+sein Signal weiterhin aus `rechnetGerade()` (bereits vorhanden, zeigt ob
+gerade eine Ollama-Anfrage laeuft).
 
 ### Layout
 
@@ -82,63 +101,38 @@ laeuft).
   Discord-Ping, als Sparkline-Graphen im Stil der Vorlage - Datenquelle
   bleibt `system-werte.js`).
 - **Mitte:** GHOST-Reaktor oben (Canvas-Animation aus der Vorlage,
-  angeschlossen an `rechnetGerade()` statt an Zufallswerte) + darunter der
-  neue Chat (siehe unten).
+  angeschlossen an `rechnetGerade()` statt an Zufallswerte) + darunter die
+  bestehende "GhostxxCode"-Kachel (siehe unten).
 - **Rechts:** Anmeldungen, Logbuch-Stand, Aktivitaet, Fehler, Warnungen,
   Selbstverbesserung-Uebersicht - als Karten im neuen Stil, untereinander.
   Laenger als in der Vorlage, weil mehr echte Inhalte reinmuessen.
 - **Unten:** Statusleiste (CPU/RAM/GPU/Discord-Ping, Terminal-/Neustart-/
   Ausschalten-/Bildlesen-Pause-Knopf) - inhaltlich wie heute, neu gestylt.
 
-## Der neue Chat
+## Coding-Helfer umziehen
 
-### Backend: `POST /api/chat`
+Die bestehende Kachel "GhostxxCode — Coding-Helfer"
+(`dashboard-seite.js`: `#chatverlauf`, `#chatformular`, `#chattext`,
+`zeichneDashboardChat()`, der `submit`-Handler gegen `POST /api/chat`) wird
+**unveraendert uebernommen** - derselbe Endpunkt, dieselbe Anfrage/Antwort-
+Form (`{text}` rein, `{ok, text}` raus), dasselbe Zeichenlimit (1200),
+dasselbe Verhalten bei pausiertem Chat-Schalter oder Ollama-Fehler. Es
+aendert sich nur:
 
-Dritter schreibender Weg im Dashboard, bewusst eng gefasst wie die anderen
-zwei (`/api/bilder-pause`, `/api/schalter`): nimmt **nur** `{ text }` entgegen,
-liefert **nur** `{ antwort }` oder `{ ok:false, grund }` zurueck. Kein
-Datei-Upload, keine Werkzeuge, keine Aktionen.
+- **Ort:** von der linken Spalte in die Mitte, unter den GHOST-Reaktor.
+- **Optik:** Karte, Eingabefeld und Verlaufsliste im neuen "Kontrollraum"-
+  Stil (Panel mit Eckmarkierungen, `--mono`-Schrift fuer die Kopfzeile,
+  Farben aus der Vorlage) statt im heutigen Stil.
 
-- Nutzt denselben `chat()` aus `ollama.js` wie der Discord-Chat - dieselbe
-  GPU-Warteschlange, dieselbe Modellwahl bei voller Grafikkarte
-  (`qwen3.5:9b` / `qwen3.5:2b`). Kein zweites, konkurrierendes Modell.
-- **Bewusst OHNE** `chat-router.js`/`detectIntent`/Werkzeugaufrufe: der
-  Dashboard-Chat ist reines Gespraech, keine Event-Verwaltung. Wer Events
-  aendern will, tut das in Discord (dort gibt es Bestaetigungs-Buttons und
-  Rechtepruefung - beides fehlt dem Dashboard-Chat bewusst). Stattdessen
-  derselbe `SYSTEM_PROMPT`-Stil wie in `message-handler.js`, aber ohne
-  Werkzeuge (`askModel({ withTools: false, ... })` oder direkter
-  `chat()`-Aufruf mit demselben Prompt-Muster - waehrend der Umsetzung zu
-  entscheiden, je nachdem was sich sauberer wiederverwenden laesst).
-- Eigener Gespraechsverlauf ueber `memory.js` mit einem neuen, festen
-  `historyKey` (z.B. `'dashboard'`) - getrennt vom Discord-Verlauf, damit
-  sich beide Kontexte nicht vermischen.
-- **Anti-Spam-Bremse:** mindestens 3 Sekunden zwischen zwei Anfragen (server-
-  seitig durchgesetzt, nicht nur im Frontend deaktiviert) - schuetzt vor
-  versehentlichem Mehrfach-Absenden, kein Limit fuer normales Hin-und-Her.
-  Bei Verstoss: `{ ok:false, grund:'zu_schnell' }`, kein Fehler, keine GPU-
-  Anfrage ausgeloest.
-- Wie jeder Endpunkt hier: darf nie den Server-Prozess crashen. Ollama nicht
-  erreichbar -> `{ ok:false, grund:'ollama_nicht_erreichbar' }`, Chat und
-  Events im echten Bot bleiben unberuehrt (Grundsatz: Ollama blockiert nie).
-
-### Frontend
-
-Textfeld + Senden-Knopf unter dem Reaktor, Verlauf der aktuellen
-Dashboard-Sitzung im Browser (kein Persistieren im Frontend noetig, der
-Verlauf liegt serverseitig in `memory.js` und wird bei Seiten-Neuladen aus
-`GET /api/chat-verlauf` — oder direkt beim naechsten `/api/stand` — erneut
-geholt; Detail fuer die Umsetzung). Kein Streaming noetig (bestehendes
-Discord-Chat-Verhalten ist auch nicht gestreamt) - Warten-Anzeige waehrend
-der Reaktor "denkt".
+Keine Aenderung an `dashboard.js` (Server) noetig fuer diesen Teil - reines
+Verschieben von Markup/CSS/dem bereits bestehenden Client-Skript.
 
 ## Fehlerbehandlung
 
-- Ollama nicht erreichbar: Chat zeigt eine Fehlermeldung im Chat-Fenster,
-  Rest des Dashboards liest weiter normal (unveraendert von heute).
-- `/api/chat` mit leerem oder zu langem Text (Obergrenze wie im Discord-Chat
-  ueblich, z.B. 2000 Zeichen): `{ ok:false, grund:'ungueltig' }`, kein
-  Ollama-Aufruf.
+- Ollama nicht erreichbar: Coding-Helfer zeigt weiterhin dieselbe
+  Fehlermeldung wie heute ("Mein Kopf streikt gerade." /
+  "Ich brauche gerade zu lange zum Denken."), unveraendert. Rest des
+  Dashboards liest weiter normal.
 - Ein Fehler beim Zeichnen des neuen Layouts (z.B. Canvas nicht verfuegbar)
   darf die uebrigen Karten nicht mitreissen - wie heute schon ueberall im
   Dashboard durch einzelne try/catch pro Abschnitt abgesichert.
@@ -147,25 +141,23 @@ der Reaktor "denkt".
 
 - `tests/dashboard.test.js`: bestehende Pruefungen auf `stand()` bleiben
   gueltig (Datenseite aendert sich inhaltlich nicht). Neue Pruefungen fuer
-  die HTML-Struktur (neue IDs statt der alten, Chat-Bereich vorhanden).
-- Neue Testdatei fuer das Chat-Backend (z.B. `tests/dashboard-chat.test.js`):
-  Anti-Spam-Bremse (zwei Anfragen schnell hintereinander -> zweite abgelehnt),
-  leerer Text abgelehnt, Ollama-Fehler wird sauber durchgereicht statt zu
-  werfen, eigener `historyKey` wird verwendet (nicht der Discord-Verlauf).
+  die HTML-Struktur (neue IDs statt der alten IDs aus der aktuellen Seite).
+- Keine neue Testdatei fuer den Coding-Helfer noetig - sein Verhalten aendert
+  sich nicht, nur sein Markup/CSS-Ort. Bestehende Tests, die ihn pruefen
+  (falls vorhanden), muessen nur auf ggf. neue IDs angepasst werden.
 - Manuelle Pruefung nach der Umsetzung (kann nicht automatisiert werden):
-  Dashboard im Browser oeffnen, optischer Abgleich mit der Vorlage, echten
-  Chat-Austausch fuehren, pruefen dass Discord-Chat und Dashboard-Chat
-  getrennte Verlaeufe haben.
+  Dashboard im Browser oeffnen, optischer Abgleich mit der Vorlage, eine
+  echte Coding-Frage stellen und pruefen dass sie wie gewohnt beantwortet
+  wird.
 
 ## Self-Review
 
-- **Platzhalter-Scan:** keine TBD/TODO offen; die einzige bewusst offene
-  Detailfrage (askModel ohne Werkzeuge vs. direkter chat()-Aufruf) ist als
-  Umsetzungsentscheidung markiert, nicht als Luecke.
-- **Konsistenz:** Nicht-Ziele (kein externer Anbieter, kein Freitext-Agent,
-  keine neuen Schalter) stehen im Einklang mit dem Brainstorming-Verlauf und
-  wiederholen sich nicht widerspruechlich im Architektur-Abschnitt.
+- **Platzhalter-Scan:** keine TBD/TODO offen.
+- **Konsistenz:** Nicht-Ziele (kein zweiter Chat, keine Verhaltensaenderung
+  am Coding-Helfer, kein externer Anbieter, kein Freitext-Agent, keine neuen
+  Schalter) stehen im Einklang mit dem Architektur-Abschnitt - insbesondere
+  wird nirgends mehr ein neuer Endpunkt erwaehnt.
 - **Abhaengigkeit klar benannt:** die Annahme, dass die fragen-dm-Branch
   vorher gemergt ist, steht explizit mit Ausweichverhalten, falls nicht.
-- **Umfang:** passend fuer einen einzelnen Umsetzungsplan - reines Frontend
-  plus ein einzelner neuer, eng gefasster Endpunkt.
+- **Umfang:** passend fuer einen einzelnen Umsetzungsplan - reines Frontend,
+  kein Backend-Task mehr noetig.
