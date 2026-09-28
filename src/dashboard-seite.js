@@ -340,28 +340,9 @@ const HTML = String.raw`<!doctype html>
 
   <div class="gitter">
     <div class="spalte-links">
-      <div class="karte" id="karte-lauf" style="display:none">
-        <h2>Sammelauszahlung</h2>
-        <div id="lauf"></div>
-      </div>
-
-      <div class="karte">
-        <h2>Offene Anmeldungen</h2>
-        <div id="anmeldungen"></div>
-      </div>
-
       <div class="karte">
         <h2>Steuerzentrale</h2>
         <div id="steuerung"></div>
-      </div>
-
-      <div class="karte">
-        <h2>GhostxxCode — Coding-Helfer</h2>
-        <div class="chatverlauf" id="chatverlauf"><div class="nichts">Frag ihn was zum Code.</div></div>
-        <form class="chatformular" id="chatformular">
-          <input id="chattext" maxlength="1200" autocomplete="off" placeholder="Frage zum Code…">
-          <button type="submit">Senden</button>
-        </form>
       </div>
 
       <div class="karte">
@@ -388,6 +369,27 @@ const HTML = String.raw`<!doctype html>
       </div>
 
       <div class="karte">
+        <h2>GhostxxCode — Coding-Helfer</h2>
+        <div class="chatverlauf" id="chatverlauf"><div class="nichts">Frag ihn was zum Code.</div></div>
+        <form class="chatformular" id="chatformular">
+          <input id="chattext" maxlength="1200" autocomplete="off" placeholder="Frage zum Code…">
+          <button type="submit">Senden</button>
+        </form>
+      </div>
+    </div>
+
+    <div class="spalte-rechts">
+      <div class="karte" id="karte-lauf" style="display:none">
+        <h2>Sammelauszahlung</h2>
+        <div id="lauf"></div>
+      </div>
+
+      <div class="karte">
+        <h2>Offene Anmeldungen</h2>
+        <div id="anmeldungen"></div>
+      </div>
+
+      <div class="karte">
         <h2><span>Was er in Discord tut</span><span class="live-pill"><i></i>Live</span></h2>
         <div id="aktivitaet" class="rollen"></div>
       </div>
@@ -396,9 +398,7 @@ const HTML = String.raw`<!doctype html>
         <h2>Logbuch — wartet auf Auszahlung</h2>
         <div id="logbuch"></div>
       </div>
-    </div>
 
-    <div class="spalte-rechts">
       <div class="karte">
         <h2>Letzte Fehler</h2>
         <div id="fehler"></div>

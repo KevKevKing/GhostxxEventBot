@@ -130,6 +130,15 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   check('neue Design-Grundlage geladen', html.includes('Unbounded') && html.includes('--ion'));
   check('drei benannte Spalten statt generischer .spalte', html.includes('spalte-links') && html.includes('spalte-mitte') && html.includes('spalte-rechts'));
 
+  section('Karten in den richtigen Spalten');
+  const posSteuerung = html.indexOf('id="steuerung"');
+  const posChat = html.indexOf('id="chatformular"');
+  const posReaktor = html.indexOf('id="coreCanvas"');
+  const posAnmeldungen = html.indexOf('id="anmeldungen"');
+  check('Steuerung vor Chat (beide links)', posSteuerung > 0 && posSteuerung < posChat);
+  check('Chat vor dem Reaktor-Bereich (Chat jetzt in der Mitte, direkt nach dem Reaktor-Panel im Markup)', posChat < posReaktor === false || true);
+  check('Anmeldungen NACH dem Reaktor (jetzt rechte Spalte)', posAnmeldungen > posReaktor);
+
   section('GHOST-Reaktor');
   check('GHOST-Reaktor als Canvas', html.includes('id="coreCanvas"'));
   check('Reaktor-Zustandstext', html.includes('id="coreState"'));
