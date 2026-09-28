@@ -121,22 +121,20 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   // Kevins vier Bereiche: Terminal, Discord, Kopf, Laeufe - dazu Logbuch,
   // Fehler und Warnungen. Zwei davon hatte ich beim ersten Mal vergessen.
   check('hat alle Bereiche', ['anmeldungen', 'logbuch', 'lauf', 'fehler', 'warnungen', 'steuerung',
-    'terminal', 'aktivitaet', 'bilder', 'leiste', 'ring']
+    'terminal', 'aktivitaet', 'leiste', 'ring']
     .every((id) => html.includes(`id="${id}"`)));
+  // Die "Bilder — was er gelesen hat"-Kachel (id="bilder") ist raus, siehe
+  // "Er fragt"-Abschnitt unten - der Pausieren-Knopf lebt jetzt in "leiste".
+  check('keine eigene Bilder-Kachel mehr', !html.includes('id="bilder"'));
 
   section('Pause-Knopf fuers Bildlesen');
   // Kevins eigener Knopf: nur das Bildlesen haelt an, Chat und Events nicht.
   check('ruft den eigenen Weg auf, nicht /api/antwort', html.includes('/api/bilder-pause'));
   check('Knopf-Text sagt, was ein Klick als naechstes tut', html.includes('Bildlesen pausieren') && html.includes('Bildlesen fortsetzen'));
 
-  section('Bestand und Chronik sind zweierlei');
-  // Kevins Rechnung ging nicht auf: 80 Bilder in den Tickets, aber 82 gelesen,
-  // 4 unlesbar und 8 in der Schlange. Drei Toepfe unter einer Ueberschrift.
-  // Jetzt steht der Bestand oben - alles andere ist eine Teilmenge davon - und
-  // die Chronik darunter, mit dazugeschriebenem "seit es ihn gibt".
-  check('Bestand in Tickets', html.includes('unbezahlte Nachweise in'));
-  check('  als Teilmengen', html.includes('ausgewertet') && html.includes('noch nicht angesehen'));
-  check('Chronik getrennt benannt', html.includes('seit es ihn gibt'));
+  section('"Er fragt"-Kachel ist raus (ersetzt durch DM, siehe frage-erinnerung.js)');
+  check('kein /api/antwort mehr in der Seite', !html.includes('/api/antwort'));
+  check('keine Fragen-Kachel mehr', !html.includes('karte-fragen'));
 
   section('Ruhebildschirm');
   // Seit 20.08.: Kevins eigenes Waldfoto (ChatGPT) als Daten-URI statt
@@ -204,6 +202,9 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   check('selbstverbesserung-Feld vorhanden', Boolean(stand2.selbstverbesserung));
   check('Heutige Laeufe ist eine Zahl', typeof stand2.selbstverbesserung.heutigeLaeufe === 'number');
   check('Letzter Eintrag sichtbar', stand2.selbstverbesserung.letzteEintraege.some((e) => e.titel === 'Dashboard-Testproblem'));
+
+  section('Offene Fragen kommen nicht mehr ueber das Dashboard (siehe frage-erinnerung.js)');
+  check('kein fragen-Feld mehr in stand()', !('fragen' in stand2));
 
   temp.cleanup();
   finish();

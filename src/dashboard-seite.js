@@ -145,18 +145,6 @@ const HTML = String.raw`<!doctype html>
     100% { opacity: 0; transform: scale(1.04); }
   }
 
-  .frage { border-left: 3px solid var(--akzent); background: #0f1620;
-           padding: 10px 12px; border-radius: 8px; margin-bottom: 10px; }
-  .frage p { margin: 0 0 4px; }
-  .frage .warum { color: var(--leise); font-size: 12px; margin-bottom: 8px; }
-  .frage form { display: flex; gap: 6px; }
-  .frage input { flex: 1; background: #0b0e13; border: 1px solid var(--rand);
-                 color: var(--text); border-radius: 6px; padding: 6px 9px;
-                 font: inherit; }
-  .frage button { background: var(--akzent); border: 0; color: #08111f;
-                  border-radius: 6px; padding: 6px 14px; font: inherit;
-                  font-weight: 600; cursor: pointer; }
-  .frage.fertig { border-color: var(--gut); opacity: .6; }
   .pause-knopf { background: var(--karte2, #16202c); border: 1px solid var(--rand); color: var(--text);
                  border-radius: 6px; padding: 6px 12px; font: inherit; font-size: 12px;
                  font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0; }
@@ -368,8 +356,6 @@ const HTML = String.raw`<!doctype html>
      Bildschirm wird von selbst mehr sichtbar. */
   .rollen { max-height: 21vh; overflow-y: auto; }
   #logbuch { max-height: 27vh; overflow-y: auto; }
-  #fragen { max-height: 34vh; overflow-y: auto; }
-  #bilder { max-height: 30vh; overflow-y: auto; }
   .terminal { max-height: 22vh; overflow-y: auto; margin: 0;
               font: 12px/1.5 Consolas, monospace; color: #7fd4e8;
               white-space: pre-wrap; word-break: break-word; }
@@ -470,16 +456,6 @@ const HTML = String.raw`<!doctype html>
     </div>
 
     <div class="spalte">
-      <div class="karte" id="karte-fragen" style="display:none">
-        <h2>Er fragt</h2>
-        <div id="fragen"></div>
-      </div>
-
-      <div class="karte">
-        <h2><span>Bilder — was er gelesen hat</span><span class="live-pill"><i></i>OCR</span></h2>
-        <div id="bilder"></div>
-      </div>
-
       <div class="karte">
         <h2>Letzte Fehler</h2>
         <div id="fehler"></div>
@@ -555,7 +531,7 @@ function messwert(name, wert, prozent, verlaufWerte, farbe) {
     + (verlaufWerte ? kurve(verlaufWerte, farbe) : '') + '</div>';
 }
 
-function zeichneLeiste(s) {
+function zeichneLeiste(s, bilder) {
   if (!s) return '';
   const teile = [];
 
@@ -578,6 +554,16 @@ function zeichneLeiste(s) {
     teile.push(messwert('Discord', s.pingMs + ' ms', s.pingMs > 500 ? 95 : (s.pingMs > 150 ? 75 : 10)));
   }
 
+  // Frueher Teil der "Bilder — was er gelesen hat"-Kachel, die mit der Kachel
+  // zusammen raus ist - der Knopf selbst bleibt, weil er der einzige Weg ist,
+  // das Bildlesen an-/auszuschalten (POST /api/bilder-pause, siehe CLAUDE.md).
+  if (bilder) {
+    teile.push('<button id="bilder-pause-knopf" class="pause-knopf' + (bilder.pausiert ? ' aktiv' : '') + '" '
+      + 'data-pausiert="' + (bilder.pausiert ? '1' : '0') + '">'
+      + (bilder.pausiert ? '▶ Bildlesen fortsetzen' : '⏸ Bildlesen pausieren')
+      + '</button>');
+  }
+
   teile.push('<button id="term-knopf" class="mini-knopf neutral" title="Terminal-Log anzeigen">▤ Terminal</button>');
   teile.push('<button id="neustart-knopf" class="mini-knopf" title="Bot manuell neustarten - dauert ca. 15-20 Sekunden">↻ Neustart</button>');
   teile.push('<button id="aus-knopf" class="mini-knopf" title="Bot komplett ausschalten - Watchdog und Windows-Autostart warten dann, bis er wieder eingeschaltet wird">⏻ Ausschalten</button>');
@@ -585,111 +571,8 @@ function zeichneLeiste(s) {
   return teile.join('');
 }
 
-function zeichneBilder(d) {
-  const b = d.bilder;
-  // Jede Zahl genau einmal, und dazu was er GERADE tut. Vorher standen hier
-  // drei verschiedene Zaehler fuer "gelesen", die nie uebereinstimmten.
-  const zustandFarbe = b.zustand && b.zustand.was === 'liest' ? 'var(--gut)'
-    : (b.zustand && (b.zustand.was === 'spiel' || b.zustand.was === 'speicher' || b.zustand.was === 'pausiert') ? 'var(--warn)' : 'var(--leise)');
-
-  // Der BESTAND: was wirklich in den Tickets liegt. Das ist die Zahl, von der
-  // alle anderen Teilmengen sind - Kevins Rechnung ging vorher nicht auf, weil
-  // hier die Chronik stand und daneben der Merkzettel.
-  const s = b.bestand;
-  const teil = (n, text, farbe) => (n
-    ? ' · <b style="color:' + farbe + '">' + n + '</b> ' + text
-    : '');
-
-  const bestand = s
-    ? '<div style="margin-bottom:8px">'
-      + '<b style="font-size:15px">' + s.beitraege + '</b> unbezahlte Nachweise in '
-      + '<b>' + s.mitBildern + '</b> von <b>' + s.tickets + '</b> Tickets'
-      + '<div class="leise" style="margin-top:2px">davon '
-      + '<b style="color:var(--gut)">' + s.gelesen + '</b> ausgewertet'
-      + teil(s.ohneEvent, 'ohne Event', 'var(--warn)')
-      + teil(s.unlesbar, 'nicht lesbar', 'var(--schlecht)')
-      + teil(s.wartend, 'in der Schlange', 'var(--text)')
-      + teil(s.offen, 'noch nicht angesehen', 'var(--leise)')
-      + '</div>'
-      // Haeufen sich die Unlesbaren in einem Ticket, ist das kein Zufall.
-      + (s.unlesbarJeTicket && s.unlesbarJeTicket.length === 1 && s.unlesbar > 2
-        ? '<div class="leise" style="margin-top:2px;color:var(--warn)">alle '
-          + s.unlesbar + ' unlesbaren liegen in <b>' + sicher(s.unlesbarJeTicket[0].name)
-          + '</b></div>'
-        : '')
-      + '</div>'
-    : '';
-
-  // Kevins eigener Knopf: nur das Bildlesen haelt an, Chat und Events nicht -
-  // fuers Zocken ohne dass die Karte geteilt werden muss. Der Text auf dem
-  // Knopf sagt immer, was ein Klick als naechstes TUT, nicht was gerade ist -
-  // sonst muesste man erst nachdenken, was "Bildlesen: an" eigentlich bedeutet.
-  const pauseKnopf = '<button id="bilder-pause-knopf" class="pause-knopf' + (b.pausiert ? ' aktiv' : '') + '" '
-    + 'data-pausiert="' + (b.pausiert ? '1' : '0') + '">'
-    + (b.pausiert ? '▶ Bildlesen fortsetzen' : '⏸ Bildlesen pausieren')
-    + '</button>';
-
-  // Die CHRONIK: alles, was er je geoeffnet hat. Waechst ewig weiter und ist
-  // deshalb groesser als der Bestand - das ist kein Fehler, muss aber
-  // drangeschrieben stehen.
-  const kopf = '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">'
-    + '<div style="flex:1">' + bestand + '</div>' + pauseKnopf + '</div>'
-    + '<div class="leise" style="margin-bottom:8px">'
-    + 'insgesamt gelesen, seit es ihn gibt: <b>' + b.gelesen + '</b>'
-    + (b.gescheitert ? ' · <b style="color:var(--schlecht)">' + b.gescheitert + '</b> nicht lesbar' : '')
-    + (b.zustand ? '<br><span style="color:' + zustandFarbe + '">' + sicher(b.zustand.text) + '</span>' : '')
-    + (b.sucht && b.wartend ? '<br><span class="leise">sucht weiter ab <b>' + sicher(b.sucht) + '</b></span>' : '')
-    + (b.unterbrochen ? '<br><span style="color:var(--warn)">war unterbrochen, macht dort weiter</span>' : '')
-    + (b.pausiert ? '<br><span style="color:var(--warn)">Bildlesen pausiert - Chat und Events laufen normal weiter</span>' : '')
-    + '</div>';
-
-  if (!b.liste.length) {
-    return kopf + '<div class="nichts">Noch nichts gelesen. Neue Bilder werden automatisch ausgewertet.</div>';
-  }
-
-  const zeilen = b.liste.map((g) => {
-    // Drei verschiedene Zustaende, und sie duerfen NICHT gleich aussehen:
-    // erkannt, gelesen-aber-nichts-drauf, und gar nicht gelesen. Beim ersten
-    // Lauf sah ein fehlgeschlagener Aufruf aus wie "nichts erkannt" - das
-    // Bild waere nie wieder angesehen worden.
-    const garnicht = !g.antwort;
-    const nichts = !garnicht && !(g.labels || []).length && !g.antwort.wappen;
-    const erkannt = (g.labels || []).length
-      ? '<b style="color:var(--gut)">' + sicher(g.labels.join(', ')) + '</b>'
-      : (g.antwort && g.antwort.wappen
-        ? '<b style="color:var(--gut)">SK (Wappen)</b>'
-        : (garnicht
-          ? '<b style="color:var(--schlecht)">konnte nicht gelesen werden</b>'
-          : '<b style="color:var(--warn)">kein Event drauf</b>'
-            // Eine Fehlanzeige gilt erst beim zweiten Mal. Solange steht dabei,
-            // dass er nochmal hinschaut - sonst sieht es aus wie ein Urteil.
-            + ((g.leerVersuche || 0) < 2
-              ? ' <span class="leise">— schaut nochmal</span>'
-              : ' <span class="leise">— zweimal geprüft</span>')));
-
-    // Was jemand behauptet hat, gegen das, was wirklich im Bild steht.
-    const angegeben = g.angegeben ? sicher(g.angegeben.slice(0, 34)) : '(kein Text)';
-
-    // Sprung direkt zur Nachricht. Gerade bei "nichts erkannt" ist das der
-    // ganze Punkt: sonst weiss man nicht, welches Bild gemeint ist.
-    const ziel = g.kanalId && g.messageId
-      ? 'https://discord.com/channels/' + d.guildId + '/' + g.kanalId + '/' + g.messageId
-      : '';
-    const link = ziel
-      ? '<a class="sprung" href="' + ziel + '" target="_blank" rel="noreferrer">„' + angegeben + '"</a>'
-      : '„' + angegeben + '"';
-
-    return '<div class="tat' + (nichts || garnicht ? ' offen' : '') + '">'
-      + '<span class="wann">' + new Date(g.gelesenAm).toLocaleTimeString('de-DE') + '</span>'
-      + erkannt
-      + (g.zeitpunkt ? ' <span class="leise">' + sicher(g.zeitpunkt.text) + '</span>' : '')
-      + '<div class="leise">' + (g.werName ? sicher(g.werName) + ' — ' : '')
-      + 'angegeben: ' + link + '</div>'
-      + '</div>';
-  });
-
-  return kopf + zeilen.join('');
-}
+// Die frueher hier gezeichnete "Bilder — was er gelesen hat"-Kachel (Bestand,
+// Chronik) ist raus - der Pausieren-Knopf lebt jetzt in zeichneLeiste() oben.
 
 function zeichneAnmeldungen(liste) {
   if (!liste.length) return '<div class="nichts">Gerade ist nichts offen.</div>';
@@ -786,53 +669,8 @@ function zeichneLogbuch(lb, d) {
   + (lb.zeilen.length > 14 ? '<div class="leise">… und ' + (lb.zeilen.length - 14) + ' weitere</div>' : '');
 }
 
-// Beantwortete Fragen bleiben stehen, bis die Seite neu geladen wird - sonst
-// verschwindet die Zeile unter den Fingern, sobald man abschickt.
-const erledigt = new Set();
-
-function zeichneFragen(fragen) {
-  const offen = (fragen || []).filter((f) => !erledigt.has(f.id));
-  $('karte-fragen').style.display = offen.length ? '' : 'none';
-  if (!offen.length) return;
-
-  // Nicht neu zeichnen, solange jemand tippt - sonst ist der Text weg.
-  if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
-
-  $('fragen').innerHTML = offen.map((f) =>
-    '<div class="frage" data-id="' + sicher(f.id) + '">'
-    + '<p>' + sicher(f.frage) + '</p>'
-    + '<div class="warum">' + sicher(f.warum) + '</div>'
-    + '<form><input placeholder="Antwort…" autocomplete="off">'
-    + '<button type="submit">Merken</button></form></div>'
-  ).join('');
-
-  for (const kasten of document.querySelectorAll('.frage')) {
-    kasten.querySelector('form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const feld = kasten.querySelector('input');
-      const antwort = feld.value.trim();
-      if (!antwort) return;
-
-      const frage = kasten.querySelector('p').textContent;
-      feld.disabled = true;
-
-      const r = await fetch('/api/antwort', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ frage, antwort, id: kasten.dataset.id }),
-      }).then((x) => x.json()).catch(() => ({ ok: false }));
-
-      if (r.ok) {
-        erledigt.add(kasten.dataset.id);
-        kasten.classList.add('fertig');
-        kasten.querySelector('form').innerHTML = '<span class="leise">Gemerkt.</span>';
-      } else {
-        feld.disabled = false;
-        kasten.querySelector('.warum').textContent = 'Hat nicht geklappt: ' + (r.reason || 'unbekannt');
-      }
-    });
-  }
-}
+// Fragen kommen seit frage-erinnerung.js per echter DM statt hier im
+// Dashboard - keine Kachel, keine Zeichenfunktion mehr noetig.
 
 const SCHALTER_GRUPPEN = [
   ['Event & Chat', [['eventScheduler', 'Event-Scheduler'], ['terminErinnerungen', 'Termin-Erinnerungen'], ['chat', 'Ghostxx-Chat'], ['commands', 'Alle Commands']]],
@@ -907,11 +745,9 @@ async function laden() {
       ? d.bilder.wartend + ' Bilder in der Schlange'
       : 'alles erledigt');
 
-  zeichneFragen(d.fragen);
   $('stand').textContent = 'Stand ' + new Date(d.zeit).toLocaleTimeString('de-DE');
   $('laufzeit').textContent = 'läuft seit ' + d.system.laufzeit;
-  $('leiste').innerHTML = zeichneLeiste(d.system);
-  $('bilder').innerHTML = zeichneBilder(d);
+  $('leiste').innerHTML = zeichneLeiste(d.system, d.bilder);
 
   // innerHTML baut den Knopf bei jedem Aufruf neu - deshalb hier jedes Mal
   // frisch binden, genau wie beim Neustart-Knopf gleich darunter.
@@ -949,8 +785,8 @@ async function laden() {
   }
 
   // innerHTML baut den Knopf bei jedem Aufruf neu - deshalb hier jedes Mal
-  // frisch binden, genau wie bei den Fragen oben. Kein alter Knopf, an dem
-  // ein Klick ins Leere liefe.
+  // frisch binden, genau wie beim Terminal-/Neustart-/Aus-Knopf oben. Kein
+  // alter Knopf, an dem ein Klick ins Leere liefe.
   const pauseKnopf = document.getElementById('bilder-pause-knopf');
   if (pauseKnopf) {
     pauseKnopf.addEventListener('click', async () => {
