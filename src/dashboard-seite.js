@@ -309,6 +309,15 @@ const HTML = String.raw`<!doctype html>
      draufschauen muss. */
   .tat.offen { border-left: 2px solid var(--warn); padding-left: 8px;
                background: rgba(240,180,41,.05); }
+
+  .tele { display: grid; gap: 12px; }
+  .t-row { display: grid; grid-template-columns: 52px 1fr auto; align-items: center; gap: 10px; }
+  .t-row .k { font: 500 10.5px var(--mono); letter-spacing: .12em; color: var(--leiser); }
+  .t-row .v { font: 500 12px var(--mono); font-variant-numeric: tabular-nums; color: var(--text); text-align: right; min-width: 74px; }
+  .t-row svg { width: 100%; height: 26px; display: block; }
+  .t-bar { height: 3px; background: var(--rand); border-radius: 2px; overflow: hidden; grid-column: 2/4; margin-top: -6px; }
+  .t-bar i { display: block; height: 100%; background: var(--ion); border-radius: 2px; transition: width .8s ease; }
+  .t-bar i.heiss { background: var(--warn); }
 </style>
 </head>
 <body>
@@ -353,6 +362,11 @@ const HTML = String.raw`<!doctype html>
           <input id="chattext" maxlength="1200" autocomplete="off" placeholder="Frage zum Code…">
           <button type="submit">Senden</button>
         </form>
+      </div>
+
+      <div class="karte">
+        <h2>System</h2>
+        <div id="telemetrie"></div>
       </div>
     </div>
 
@@ -778,6 +792,33 @@ function setThinking(on) {
   if (reduce && on) requestAnimationFrame(draw);
 }
 
+const teleVerlauf = { cpu: [], ram: [], gpu: [], vram: [], ping: [] };
+function teleSpark(werte, farbe) {
+  if (!werte.length) return '';
+  const lo = Math.min(...werte), hi = Math.max(...werte) || 1;
+  const pts = werte.map((v, j) => [j / Math.max(1, werte.length - 1) * 100, 24 - (hi === lo ? 12 : (v - lo) / (hi - lo) * 21)]);
+  const d = 'M' + pts.map((p) => p.map((n) => n.toFixed(1)).join(',')).join('L');
+  return '<svg viewBox="0 0 100 26" preserveAspectRatio="none"><path d="' + d + '" fill="none" stroke="' + farbe + '" stroke-width="1.2" vector-effect="non-scaling-stroke"></path></svg>';
+}
+function teleZeile(key, label, wert, text, prozent) {
+  const verlauf = teleVerlauf[key];
+  verlauf.push(wert); if (verlauf.length > 40) verlauf.shift();
+  return '<div class="t-row"><span class="k">' + label + '</span>' + teleSpark(verlauf, 'var(--ion)') + '<span class="v">' + text + '</span></div>'
+    + '<div class="t-bar"><i style="width:' + Math.max(0, Math.min(100, prozent)) + '%" class="' + (prozent > 75 ? 'heiss' : '') + '"></i></div>';
+}
+function zeichneTelemetrie(s) {
+  if (!s) { $('telemetrie').innerHTML = '<div class="nichts">Keine Systemwerte.</div>'; return; }
+  let html = '';
+  if (s.cpu !== null) html += teleZeile('cpu', 'CPU', s.cpu, s.cpu + ' %', s.cpu);
+  html += teleZeile('ram', 'RAM', s.ramBelegtGb, s.ramBelegtGb + ' / ' + s.ramGesamtGb + ' GB', s.ramBelegtGb / s.ramGesamtGb * 100);
+  if (s.gpu) {
+    html += teleZeile('gpu', 'GPU', s.gpu.last, s.gpu.last + ' % · ' + s.gpu.grad + '°', s.gpu.last);
+    html += teleZeile('vram', 'VRAM', s.gpu.vramMb, (s.gpu.vramMb / 1024).toFixed(1) + ' / ' + Math.round(s.gpu.vramGesamtMb / 1024) + ' GB', s.gpu.vramMb / s.gpu.vramGesamtMb * 100);
+  }
+  if (s.pingMs !== null) html += teleZeile('ping', 'Discord', s.pingMs, s.pingMs + ' ms', Math.min(100, s.pingMs / 2));
+  $('telemetrie').innerHTML = '<div class="tele">' + html + '</div>';
+}
+
 async function laden() {
   let d;
   try {
@@ -803,6 +844,7 @@ async function laden() {
   $('stand').textContent = 'Stand ' + new Date(d.zeit).toLocaleTimeString('de-DE');
   $('laufzeit').textContent = 'läuft seit ' + d.system.laufzeit;
   $('leiste').innerHTML = zeichneLeiste(d.system, d.bilder);
+  zeichneTelemetrie(d.system);
 
   // innerHTML baut den Knopf bei jedem Aufruf neu - deshalb hier jedes Mal
   // frisch binden, genau wie beim Neustart-Knopf gleich darunter.

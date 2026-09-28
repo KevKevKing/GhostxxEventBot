@@ -123,6 +123,7 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   check('hat alle Bereiche', ['anmeldungen', 'logbuch', 'lauf', 'fehler', 'warnungen', 'steuerung',
     'terminal', 'aktivitaet', 'leiste', 'ring']
     .every((id) => html.includes(`id="${id}"`)));
+  check('Telemetrie-Kachel vorhanden', html.includes('id="telemetrie"'));
   // Die "Bilder — was er gelesen hat"-Kachel (id="bilder") ist raus, siehe
   // "Er fragt"-Abschnitt unten - der Pausieren-Knopf lebt jetzt in "leiste".
   check('keine eigene Bilder-Kachel mehr', !html.includes('id="bilder"'));
