@@ -130,6 +130,15 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   check('neue Design-Grundlage geladen', html.includes('Unbounded') && html.includes('--ion'));
   check('drei benannte Spalten statt generischer .spalte', html.includes('spalte-links') && html.includes('spalte-mitte') && html.includes('spalte-rechts'));
 
+  section('Reaktor dreht immer, unabhaengig von "Bewegung reduzieren"');
+  // Gemessen bei Kevin: sein System hat prefers-reduced-motion gesetzt (nie
+  // bewusst so eingestellt) - die Vorlage haette den Reaktor dadurch fast
+  // stillstehen lassen. Der Reaktor ist hier das gewollte zentrale
+  // Design-Element, nicht zufaelliges Chrome, deshalb bewusst OHNE Ruecksicht
+  // auf diese Einstellung (anders als der Ruhebildschirm-Regen, siehe oben).
+  check('kein prefers-reduced-motion-Bezug mehr im Reaktor-Skript', !/const reduce = matchMedia/.test(html));
+  check('requestAnimationFrame(draw) steht bedingungslos am Ende der Zeichenfunktion', /cx\.restore\(\);\s*requestAnimationFrame\(draw\);/.test(html));
+
   section('Karten in den richtigen Spalten');
   const posSteuerung = html.indexOf('id="steuerung"');
   const posChat = html.indexOf('id="chatformular"');
