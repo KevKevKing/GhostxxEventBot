@@ -669,16 +669,22 @@ $('chatformular').addEventListener('submit', async (e) => {
 });
 
 // GHOST-Reaktor: Canvas-Zeichnung uebernommen aus der Vorlage
-// (ghost-dashboard.html, Abschnitt "CORE REACTOR"). Zwei Anpassungen:
-// $() ist oben schon als document.getElementById-Wrapper definiert und
-// wird hier wiederverwendet statt neu deklariert; "reduce" gab es in
-// dieser Datei noch nicht (anders als von der Vorlagen-Annahme erwartet),
-// daher wird es hier neu deklariert. requestAnimationFrame(draw) laeuft nur,
-// solange die Seite wirklich sichtbar UND wach ist (siehe starteSchleifeFallsNoetig
+// (ghost-dashboard.html, Abschnitt "CORE REACTOR"). $() ist oben schon als
+// document.getElementById-Wrapper definiert und wird hier wiederverwendet
+// statt neu deklariert. requestAnimationFrame(draw) laeuft nur, solange die
+// Seite wirklich sichtbar UND wach ist (siehe starteSchleifeFallsNoetig
 // weiter unten) - die Grafikkarte teilt sich mit GTA, eine Animation, die
 // hinter dem Ruhebildschirm oder in einem Hintergrund-Tab trotzdem mit voller
 // Framerate weiterlaeuft, waere reine Verschwendung.
-const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+//
+// Bewusst OHNE Ruecksicht auf "prefers-reduced-motion" (anders als die
+// Vorlage): gemessen bei Kevin stand die Vorlagen-Version fast still, weil
+// sein System diese Einstellung gesetzt hat (er wollte das nicht, hat es nie
+// bewusst so eingestellt) - der drehende Reaktor ist hier kein zufaelliges
+// Chrome, sondern das gewollte zentrale Design-Element des Dashboards. Wer
+// wirklich weniger Bewegung will, stellt das systemweit um (wirkt dann
+// ueberall, nicht nur hier) statt dass dieses eine Element es stillschweigend
+// unterbindet.
 const cv = $('coreCanvas'), cx = cv.getContext('2d');
 let coreW = 0, coreH = 0, coreDPR = 1, speed = 1, target = 1, t0 = performance.now(), rot = 0;
 let loopLaeuft = false;
@@ -814,11 +820,7 @@ function draw(ts) {
   [[-1, 0], [1, 0]].forEach(([dx]) => { cx.beginPath(); cx.moveTo(dx * R * 1.14, 0); cx.lineTo(dx * Math.max(coreW / 2, R * 1.2), 0); cx.stroke(); });
 
   cx.restore();
-  if (!reduce || think > 0) {
-    requestAnimationFrame(draw);
-  } else {
-    loopLaeuft = false;
-  }
+  requestAnimationFrame(draw);
 }
 starteSchleifeFallsNoetig();
 function setThinking(on) {
