@@ -129,6 +129,11 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   check('neue Design-Grundlage geladen', html.includes('Unbounded') && html.includes('--ion'));
   check('drei benannte Spalten statt generischer .spalte', html.includes('spalte-links') && html.includes('spalte-mitte') && html.includes('spalte-rechts'));
 
+  section('GHOST-Reaktor');
+  check('GHOST-Reaktor als Canvas', html.includes('id="coreCanvas"'));
+  check('Reaktor-Zustandstext', html.includes('id="coreState"'));
+  check('alter SVG-Kern ist raus', !html.includes('class="adern"'));
+
   section('Pause-Knopf fuers Bildlesen');
   // Kevins eigener Knopf: nur das Bildlesen haelt an, Chat und Events nicht.
   check('ruft den eigenen Weg auf, nicht /api/antwort', html.includes('/api/bilder-pause'));

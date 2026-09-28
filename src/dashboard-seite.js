@@ -63,8 +63,6 @@ const HTML = String.raw`<!doctype html>
     .spalte-mitte { order: -1; }
   }
 
-  @keyframes dreh { to { transform: rotate(360deg); } }
-
   /* ---- Ruhebildschirm ---------------------------------------------------
      Reine Zierde, und das darf sie auch sein: das Dashboard laeuft dahinter
      weiter, hier wird nichts gerechnet. Alles CSS, kein Bild, keine Datei. */
@@ -120,14 +118,16 @@ const HTML = String.raw`<!doctype html>
   /* Kein Knopf: ein Klick irgendwohin weckt ihn. */
   .ruhe.wacht .ruheinhalt, .ruhe.wacht .ruheuhr { opacity: 0; transition: opacity .5s; }
 
-  /* Der Kern im Dashboard ist der geheime Weg zurueck in den Schlaf. */
-  .orb { cursor: pointer; }
-  .orb::after {
+  /* Der Kern im Dashboard ist der geheime Weg zurueck in den Schlaf.
+     Frueher an .orb gehaengt, jetzt am Reaktor-Stage-Container (#ring),
+     da der SVG-Kern durch den Canvas-Reaktor ersetzt wurde. */
+  .stage { cursor: pointer; }
+  .stage::after {
     content: 'schlafen'; position: absolute; bottom: -18px; left: 50%;
     transform: translateX(-50%); font-size: 10px; letter-spacing: .14em;
     color: var(--leise); opacity: 0; transition: opacity .25s; white-space: nowrap;
   }
-  .orb:hover::after { opacity: .8; }
+  .stage:hover::after { opacity: .8; }
 
   .hallo {
     position: absolute; opacity: 0; text-align: center; padding: 0 20px;
@@ -237,74 +237,18 @@ const HTML = String.raw`<!doctype html>
   .term-box .schliessen:hover { border-color: var(--akzent); color: var(--akzent); }
   .term-box .terminal { max-height: none; flex: 1; }
 
-  /* Der Kern. Reine Zierde - aber er dreht nur, solange Daten kommen. */
-  .kern { display: grid; place-items: center; padding: 2px 0 8px; position: relative; }
-  /* Duenne, kaum sichtbare Linien vom Kern zu den Karten drumherum - ein
-     Hinweis, dass hier alles vom Kern ausgeht. Rein dekorativ, liegt hinter
-     allem und reagiert auf nichts. */
-  .kern .adern { position: absolute; inset: -14px -40px; pointer-events: none; z-index: 0;
-                 opacity: .35; }
-  .kern .adern path { fill: none; stroke: var(--akzent); stroke-width: 1;
-                       stroke-dasharray: 3 9; animation: aderpuls 5s ease-in-out infinite; }
-  .kern .adern path:nth-child(2) { animation-delay: -1.6s; }
-  .kern .adern path:nth-child(3) { animation-delay: -3.2s; }
-  @keyframes aderpuls { 0%,100% { opacity: .18; } 50% { opacity: .5; } }
-  .orb { position: relative; width: 230px; height: 230px; display: grid; place-items: center;
-         z-index: 1; animation: kernatmen 4s ease-in-out infinite; }
-  @keyframes kernatmen { 0%,100% { transform: scale(1); } 50% { transform: scale(1.025); } }
-  /* Weicher Glow-Untergrund, dahinter. */
-  .orb::before {
-    content: ''; position: absolute; inset: 6%;
-    border-radius: 50%; background: radial-gradient(circle, rgba(34,211,238,.32), transparent 70%);
-    filter: blur(16px);
-  }
-  .orb i { position: absolute; border-radius: 50%; }
-  /* Aeusserster Ring: duenn, ganz leicht rotierend, kaum Kontrast. */
-  .orb i:nth-child(1) {
-    inset: 0; border: 1px solid transparent; border-top-color: rgba(34,211,238,.4);
-    border-left-color: rgba(34,211,238,.14); animation: dreh 22s linear infinite;
-  }
-  /* Der eigentliche Kern-Ring: durchgezogen, mit Leuchtrand aussen UND innen -
-     das ist der Ring, der das Auge zuerst findet. */
-  .orb i:nth-child(2) {
-    inset: 42px; border: 2px solid var(--akzent);
-    box-shadow: inset 0 0 18px rgba(34,211,238,.5), 0 0 22px rgba(34,211,238,.55);
-  }
-  /* Gestrichelter Skalenring, dreht sichtbar - der "Instrument"-Anteil. */
-  .orb i:nth-child(3) {
-    inset: 22px; border: 1px dashed rgba(34,211,238,.5); animation: dreh 16s linear infinite;
-  }
-  .orb i:nth-child(4) {
-    inset: 60px; border: 1px solid transparent; border-top-color: rgba(103,232,249,.55);
-    animation: dreh 7s linear infinite reverse;
-  }
-  .orb b {
-    position: relative; display: block; text-align: center;
-    font-size: 26px; font-weight: 700; letter-spacing: -.01em;
-    color: #e8fbff; text-shadow: 0 0 24px rgba(34,211,238,.75), 0 0 46px rgba(34,211,238,.35);
-  }
-  /* Kleines Label drueber, Status drunter - beides reine CSS-Beschriftung,
-     der Status haengt an denselben Klassen, die das Skript unten schon
-     setzt (.denkt / .aus), also ohne jede JS-Aenderung immer korrekt. */
-  .orb b::before {
-    content: 'SYSTEM CORE'; display: block; font-size: 9px; font-weight: 600;
-    letter-spacing: .3em; color: var(--leise); margin-bottom: 6px; text-shadow: none;
-  }
-  .orb b::after {
-    content: 'ONLINE'; display: block; font-size: 9px; font-weight: 700;
-    letter-spacing: .15em; color: var(--gut); margin-top: 6px; text-shadow: none;
-    font-family: Consolas, ui-monospace, monospace;
-  }
-  .orb.denkt i:nth-child(1), .orb.denkt i:nth-child(3), .orb.denkt i:nth-child(4) {
-    animation-duration: 1.4s;
-  }
-  .orb.denkt i:nth-child(2) { border-color: var(--gut); box-shadow: inset 0 0 18px rgba(53,224,138,.5), 0 0 22px rgba(53,224,138,.55); }
-  .orb.denkt b { text-shadow: 0 0 22px rgba(53,224,138,.7); }
-  .orb.denkt b::after { content: 'LIEST GERADE'; color: var(--gut); }
-  .orb.aus { animation-play-state: paused; }
-  .orb.aus i { animation-play-state: paused; }
-  .orb.aus i:nth-child(2) { border-color: var(--schlecht); box-shadow: inset 0 0 18px rgba(255,95,109,.4), 0 0 22px rgba(255,95,109,.4); }
-  .orb.aus b::after { content: 'OFFLINE'; color: var(--schlecht); }
+  /* Der Kern: Canvas-Reaktor statt SVG-Ring. Zeichenlogik im Skript,
+     dreht/pulsiert nur, solange die Seite wirklich Daten bekommt. */
+  .reaktor { padding: 0; overflow: hidden; border-color: transparent; background: transparent; }
+  .reaktor::before, .reaktor::after { display: none; }
+  .stage { position: relative; display: grid; place-items: center; aspect-ratio: 1.55/1; max-height: 420px; width: 100%; }
+  #coreCanvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .core-label { position: relative; text-align: center; pointer-events: none; display: grid; gap: 8px; justify-items: center; }
+  .core-label .eyebrow { font: 400 10px var(--mono); letter-spacing: .42em; color: var(--leiser); }
+  .core-label h1 { margin: 0; font: 800 clamp(34px,5.2vw,64px)/1 var(--disp); letter-spacing: .14em; padding-left: .14em; color: var(--text); text-shadow: 0 0 28px rgba(92,240,228,.35), 0 0 2px rgba(92,240,228,.6); }
+  .core-state { font: 500 10.5px var(--mono); letter-spacing: .3em; color: var(--ion); padding: 5px 10px; border: 1px solid rgba(92,240,228,.35); border-radius: 3px; background: rgba(5,7,11,.6); }
+  .core-state.think { color: var(--warn); border-color: rgba(255,179,92,.45); }
+  .stage.aus .core-state { color: var(--schlecht); border-color: rgba(255,107,107,.45); }
   .kernstand { margin-top: 2px; color: var(--leise); font-size: 12px; text-align: center; }
   table { width: 100%; border-collapse: collapse; }
   td { padding: 5px 0; vertical-align: middle; }
@@ -413,14 +357,15 @@ const HTML = String.raw`<!doctype html>
     </div>
 
     <div class="spalte-mitte">
-      <div class="kern">
-        <svg class="adern" viewBox="0 0 400 260" preserveAspectRatio="none">
-          <path d="M200 130 Q90 70 20 40"></path>
-          <path d="M200 130 Q310 70 380 40"></path>
-          <path d="M200 130 Q90 190 20 220"></path>
-          <path d="M200 130 Q310 190 380 220"></path>
-        </svg>
-        <div class="orb" id="ring"><i></i><i></i><i></i><i></i><b>Ghostxx</b></div>
+      <div class="karte reaktor">
+        <div class="stage" id="ring">
+          <canvas id="coreCanvas" aria-hidden="true"></canvas>
+          <div class="core-label">
+            <span class="eyebrow">SYSTEM · KERN</span>
+            <h1>GHOST</h1>
+            <span class="core-state" id="coreState">BEREIT</span>
+          </div>
+        </div>
         <div class="kernstand">
           <div id="technik">…</div>
           <div id="laufzeit"></div>
@@ -708,6 +653,131 @@ $('chatformular').addEventListener('submit', async (e) => {
   zeichneDashboardChat();
 });
 
+// GHOST-Reaktor: Canvas-Zeichnung uebernommen aus der Vorlage
+// (ghost-dashboard.html, Abschnitt "CORE REACTOR"). Zwei Anpassungen:
+// $() ist oben schon als document.getElementById-Wrapper definiert und
+// wird hier wiederverwendet statt neu deklariert; "reduce" gab es in
+// dieser Datei noch nicht (anders als von der Vorlagen-Annahme erwartet),
+// daher wird es hier neu deklariert. requestAnimationFrame(draw) startet
+// sofort, die Animation laeuft immer, nicht nur waehrend "gedacht" wird.
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const cv = $('coreCanvas'), cx = cv.getContext('2d');
+let coreW = 0, coreH = 0, coreDPR = 1, speed = 1, target = 1, t0 = performance.now(), rot = 0;
+function coreSize() {
+  coreDPR = Math.min(2, devicePixelRatio || 1);
+  const r = cv.getBoundingClientRect();
+  coreW = r.width; coreH = r.height;
+  cv.width = coreW * coreDPR; cv.height = coreH * coreDPR;
+  cx.setTransform(coreDPR, 0, 0, coreDPR, 0, 0);
+}
+new ResizeObserver(coreSize).observe(cv); coreSize();
+
+const ION = '92,240,228', EMB = '255,179,92', INK = '154,168,184';
+const orbiters = [{ label: 'CHAT', r: .78, a: 0, s: .35 }, { label: 'CODE', r: .78, a: 2.1, s: .35 }, { label: 'OCR', r: .78, a: 4.2, s: .35 }];
+const motes = Array.from({ length: 70 }, () => ({ a: Math.random() * Math.PI * 2, r: .35 + Math.random() * .75, s: (Math.random() * .4 + .1) * (Math.random() < .5 ? -1 : 1), z: Math.random() }));
+
+function arc(r, a0, a1, w, col) { cx.beginPath(); cx.arc(0, 0, r, a0, a1); cx.lineWidth = w; cx.strokeStyle = col; cx.stroke(); }
+
+function draw(ts) {
+  const dt = Math.min(50, ts - t0) / 1000; t0 = ts;
+  speed += (target - speed) * Math.min(1, dt * 2.5);
+  rot += dt * speed;
+  const R = Math.min(coreW, coreH) * 0.46, think = Math.max(0, Math.min(1, (speed - 1) / 2.5));
+  const acc = think > .3 ? EMB : ION;
+  cx.clearRect(0, 0, coreW, coreH);
+  cx.save(); cx.translate(coreW / 2, coreH / 2);
+
+  // halo
+  const g = cx.createRadialGradient(0, 0, R * .1, 0, 0, R * 1.1);
+  g.addColorStop(0, 'rgba(' + acc + ',' + (.10 + .06 * Math.sin(rot * 2)) + ')'); g.addColorStop(.55, 'rgba(' + acc + ',.03)'); g.addColorStop(1, 'rgba(0,0,0,0)');
+  cx.fillStyle = g; cx.beginPath(); cx.arc(0, 0, R * 1.1, 0, Math.PI * 2); cx.fill();
+
+  // radar sweep
+  cx.save(); cx.rotate(rot * .9);
+  const sw = cx.createConicGradient ? cx.createConicGradient(0, 0, 0) : null;
+  if (sw) {
+    sw.addColorStop(0, 'rgba(' + acc + ',.20)'); sw.addColorStop(.12, 'rgba(' + acc + ',0)'); sw.addColorStop(1, 'rgba(' + acc + ',0)');
+    cx.fillStyle = sw; cx.beginPath(); cx.moveTo(0, 0); cx.arc(0, 0, R * .93, 0, Math.PI * 2); cx.fill();
+  }
+  cx.restore();
+
+  // outer tick ring (slow cw)
+  cx.save(); cx.rotate(rot * .08);
+  for (let i = 0; i < 180; i++) {
+    const a = i / 180 * Math.PI * 2, long = i % 15 === 0, mid = i % 5 === 0;
+    const r1 = R * 1.0, r2 = R * (long ? .94 : mid ? .965 : .98);
+    cx.beginPath(); cx.moveTo(Math.cos(a) * r1, Math.sin(a) * r1); cx.lineTo(Math.cos(a) * r2, Math.sin(a) * r2);
+    cx.strokeStyle = 'rgba(' + (long ? acc : INK) + ',' + (long ? .8 : .28) + ')'; cx.lineWidth = long ? 1.5 : 1; cx.stroke();
+  }
+  cx.restore();
+
+  // static degree labels
+  cx.font = '500 9px "Geist Mono", monospace'; cx.fillStyle = 'rgba(' + INK + ',.55)'; cx.textAlign = 'center'; cx.textBaseline = 'middle';
+  [['000', -Math.PI / 2], ['090', 0], ['180', Math.PI / 2], ['270', Math.PI]].forEach(([s, a]) => cx.fillText(s, Math.cos(a) * R * 1.07, Math.sin(a) * R * 1.07));
+
+  // segmented ring (ccw)
+  cx.save(); cx.rotate(-rot * .22);
+  for (let i = 0; i < 48; i++) { const a = i / 48 * Math.PI * 2; arc(R * .86, a, a + Math.PI * 2 / 48 * .55, 3, 'rgba(' + INK + ',' + (i % 6 === 0 ? .55 : .18) + ')'); }
+  cx.restore();
+
+  // primary arcs (fast cw, glow)
+  cx.save(); cx.rotate(rot * .55);
+  cx.shadowColor = 'rgba(' + acc + ',.9)'; cx.shadowBlur = 14;
+  arc(R * .76, 0, Math.PI * .62, 3.5, 'rgba(' + acc + ',.95)');
+  arc(R * .76, Math.PI * .8, Math.PI * 1.05, 3.5, 'rgba(' + acc + ',.6)');
+  arc(R * .76, Math.PI * 1.25, Math.PI * 1.82, 3.5, 'rgba(' + acc + ',.95)');
+  cx.shadowBlur = 0;
+  cx.restore();
+
+  // thin counter ring with gaps
+  cx.save(); cx.rotate(-rot * .9);
+  arc(R * .68, 0, Math.PI * 1.4, 1, 'rgba(' + acc + ',.45)');
+  arc(R * .68, Math.PI * 1.5, Math.PI * 1.9, 1, 'rgba(' + acc + ',.45)');
+  // little tab markers
+  for (let k = 0; k < 3; k++) { const a = k * Math.PI * 2 / 3; cx.fillStyle = 'rgba(' + acc + ',.9)'; cx.fillRect(Math.cos(a) * R * .68 - 2, Math.sin(a) * R * .68 - 2, 4, 4); }
+  cx.restore();
+
+  // dotted inner ring
+  cx.save(); cx.rotate(rot * .15);
+  for (let i = 0; i < 90; i++) { const a = i / 90 * Math.PI * 2; cx.fillStyle = 'rgba(' + INK + ',.35)'; cx.fillRect(Math.cos(a) * R * .6 - .75, Math.sin(a) * R * .6 - .75, 1.5, 1.5); }
+  cx.restore();
+
+  // inner core plate + breathing ring
+  const br = .5 + .5 * Math.sin(rot * 1.6);
+  cx.fillStyle = 'rgba(5,7,11,.82)'; cx.beginPath(); cx.arc(0, 0, R * .54, 0, Math.PI * 2); cx.fill();
+  arc(R * .54, 0, Math.PI * 2, 1.2, 'rgba(' + acc + ',' + (.35 + .35 * br) + ')');
+  arc(R * .5, 0, Math.PI * 2, 1, 'rgba(' + INK + ',.12)');
+
+  // motes
+  motes.forEach((m) => {
+    const a = m.a + rot * m.s; const r = R * m.r; cx.fillStyle = 'rgba(' + acc + ',' + (.15 + .5 * m.z) + ')';
+    cx.fillRect(Math.cos(a) * r, Math.sin(a) * r, 1.2 + m.z, 1.2 + m.z);
+  });
+
+  // orbiters on the outer track
+  orbiters.forEach((o) => {
+    const a = o.a + rot * o.s, r = R * o.r * 1.2;
+    const x = Math.cos(a) * r, y = Math.sin(a) * r * 0.999;
+    cx.beginPath(); cx.arc(x, y, 4, 0, Math.PI * 2); cx.fillStyle = 'rgba(' + acc + ',1)'; cx.shadowColor = 'rgba(' + acc + ',1)'; cx.shadowBlur = 10; cx.fill(); cx.shadowBlur = 0;
+    cx.beginPath(); cx.arc(x, y, 9, 0, Math.PI * 2); cx.strokeStyle = 'rgba(' + acc + ',.35)'; cx.lineWidth = 1; cx.stroke();
+    cx.font = '500 9.5px "Geist Mono", monospace'; cx.fillStyle = 'rgba(228,236,244,.8)'; cx.textAlign = x > 0 ? 'left' : 'right';
+    cx.fillText(o.label, x + (x > 0 ? 14 : -14), y);
+  });
+
+  // crosshair lines outward
+  cx.strokeStyle = 'rgba(' + INK + ',.12)'; cx.lineWidth = 1;
+  [[-1, 0], [1, 0]].forEach(([dx]) => { cx.beginPath(); cx.moveTo(dx * R * 1.14, 0); cx.lineTo(dx * Math.max(coreW / 2, R * 1.2), 0); cx.stroke(); });
+
+  cx.restore();
+  if (!reduce || think > 0) requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+function setThinking(on) {
+  target = on ? 3.6 : 1;
+  const s = $('coreState'); s.textContent = on ? 'DENKT …' : 'BEREIT'; s.classList.toggle('think', on);
+  if (reduce && on) requestAnimationFrame(draw);
+}
+
 async function laden() {
   let d;
   try {
@@ -720,7 +790,7 @@ async function laden() {
     return;
   }
   $('ring').classList.remove('aus');
-  $('ring').classList.toggle('denkt', Boolean(d.rechnet));
+  setThinking(Boolean(d.rechnet));
 
   // Auch im Schlaf steht dran, was er tut - dann sieht man vom Sofa aus, ob
   // er noch Bilder liest.
