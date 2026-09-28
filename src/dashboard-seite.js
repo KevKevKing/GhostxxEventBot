@@ -9,59 +9,58 @@ const HTML = String.raw`<!doctype html>
 <head>
 <meta charset="utf-8">
 <title>Ghostxx</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Unbounded:wght@300;600;800&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
 <style>
   :root {
-    --bg: #060d18; --karte: rgba(12,24,38,.55); --rand: #1b3f5c;
-    --text: #dceaf5; --leise: #6f93ad;
-    --gut: #35e08a; --warn: #f0b429; --schlecht: #ff5f6d; --akzent: #22d3ee;
+    color-scheme: dark;
+    --bg: #05070B; --deck: #090D13; --karte: #0D131B; --karte2: #111926;
+    --rand: #1A2431; --rand2: #243244;
+    --text: #E4ECF4; --leise: #9AA8B8; --leiser: #5E6B7B;
+    --ion: #5CF0E4; --ion-dim: rgba(92,240,228,.14);
+    --akzent: var(--ion);
+    --gut: #57D98C; --warn: #FFB35C; --schlecht: #FF6B6B;
+    --r: 10px;
+    --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --sans: "Geist", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --disp: "Unbounded", "Geist", system-ui, sans-serif;
   }
   * { box-sizing: border-box; }
+  html, body { height: 100%; }
   body {
-    margin: 0; padding: 16px 16px 66px; color: var(--text);
-    font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
-    background: var(--bg);
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 var(--sans);
+    background-image:
+      radial-gradient(900px 600px at 50% 18%, rgba(92,240,228,.07), transparent 70%),
+      linear-gradient(var(--bg), var(--bg));
+    padding-inline: 16px;
   }
-
-  /* Der Hintergrund: zwei Nebelschleier, die sehr langsam wandern, und ein
-     feines Raster darueber. Alles CSS, kein Bild - die Seite bleibt eine
-     Datei und laedt nichts nach.
-     Fest hinter dem Inhalt, damit beim Scrollen nichts mitwandert. */
-  /* Cyan fuehrt, aber nicht allein - ein Hauch vom Violett des Ruhebildschirms
-     dahinter, sonst wirkt die Seite tot statt nach denkender KI. Kraeftiger
-     als der erste Versuch, der war zu duenn. */
   body::before {
-    content: ''; position: fixed; inset: -25%; z-index: -2; pointer-events: none;
-    background:
-      radial-gradient(closest-side at 50% 26%, rgba(34,211,238,.22), transparent),
-      radial-gradient(closest-side at 82% 18%, rgba(139,92,246,.16), transparent),
-      radial-gradient(closest-side at 80% 74%, rgba(34,211,238,.14), transparent),
-      radial-gradient(closest-side at 12% 78%, rgba(103,232,249,.12), transparent),
-      radial-gradient(closest-side at 20% 20%, rgba(56,189,248,.10), transparent);
-    filter: blur(30px);
-    animation: nebel 46s ease-in-out infinite alternate;
-  }
-  @keyframes nebel {
-    0%   { transform: translate3d(0, 0, 0) scale(1); }
-    50%  { transform: translate3d(2.5%, -2%, 0) scale(1.06); }
-    100% { transform: translate3d(-2%, 2.5%, 0) scale(1.02); }
-  }
-
-  /* Punktraster statt Linien - naeher am HUD-Vorbild, gibt dem Ganzen Tiefe,
-     ohne dass man es bewusst sieht. */
-  body::after {
-    content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-    background-image: radial-gradient(rgba(34,211,238,.5) 1px, transparent 1px);
+    content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: linear-gradient(rgba(154,168,184,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(154,168,184,.035) 1px, transparent 1px);
     background-size: 32px 32px;
-    opacity: .09;
-    mask-image: radial-gradient(ellipse 90% 70% at 50% 35%, #000 25%, transparent 78%);
-    -webkit-mask-image: radial-gradient(ellipse 90% 70% at 50% 35%, #000 25%, transparent 78%);
+    mask-image: radial-gradient(ellipse at 50% 30%, #000 30%, transparent 80%);
   }
 
-  /* Wer Bewegung nicht mag oder braucht, bekommt sie nicht - der Regen im
-     Ruhebildschirm ist bewusst ausgenommen: Kevins eigener Bildschirm, und
-     der Regen ist der ganze Punkt der Szene, siehe .tropfen weiter unten. */
-  @media (prefers-reduced-motion: reduce) {
-    body::before { animation: none; }
+  .shell { position: relative; z-index: 1; max-width: 1680px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; padding-block: 14px 72px; }
+  .gitter { display: grid; grid-template-columns: 300px minmax(0,1fr) 380px; gap: 14px; align-items: start; }
+  .spalte-links, .spalte-mitte, .spalte-rechts { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .karte {
+    background: linear-gradient(180deg, var(--karte), var(--deck)); border: 1px solid var(--rand); border-radius: var(--r);
+    min-width: 0; position: relative; padding: 14px;
+  }
+  .karte::before, .karte::after { content: ""; position: absolute; width: 8px; height: 8px; border-color: var(--rand2); border-style: solid; pointer-events: none; }
+  .karte::before { top: -1px; left: -1px; border-width: 1px 0 0 1px; border-top-left-radius: var(--r); }
+  .karte::after { bottom: -1px; right: -1px; border-width: 0 1px 1px 0; border-bottom-right-radius: var(--r); }
+  .karte h2 { margin: 0 0 10px; font: 600 10.5px/1 var(--mono); letter-spacing: .2em; text-transform: uppercase; color: var(--leise); display: flex; align-items: center; gap: 10px; }
+  @media (max-width: 1280px) {
+    .gitter { grid-template-columns: 280px minmax(0,1fr); }
+    .spalte-rechts { grid-column: 1/-1; }
+  }
+  @media (max-width: 900px) {
+    .gitter { grid-template-columns: 1fr; }
+    .spalte-mitte { order: -1; }
   }
 
   @keyframes dreh { to { transform: rotate(360deg); } }
@@ -194,27 +193,11 @@ const HTML = String.raw`<!doctype html>
                  animation: blinken 1.3s ease-in-out infinite; }
   @keyframes blinken { 0%,100% { opacity: 1; } 50% { opacity: .25; } }
   .leise { color: var(--leise); font-size: 12px; }
-  /* Drei Spalten, Ghostxx in der Mitte. Auf einem schmalen Bildschirm rutscht
-     alles untereinander - der Kern zuerst. */
-  .gitter { display: grid; gap: 12px; align-items: start;
-            grid-template-columns: minmax(0,1fr) minmax(0,1.05fr) minmax(0,1fr); }
-  @media (max-width: 1250px) { .gitter { grid-template-columns: minmax(0,1fr) minmax(0,1fr); } }
-  @media (max-width: 820px) { .gitter { grid-template-columns: 1fr; } }
-  .spalte { display: grid; gap: 12px; align-content: start; }
-
-  .karte {
-    background: var(--karte);
-    border: 1px solid rgba(34,211,238,.12); border-radius: 10px; padding: 12px 14px;
-    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-    box-shadow: 0 0 0 1px rgba(34,211,238,.04), 0 16px 34px -22px rgba(0,0,0,.95);
-    transition: border-color .3s ease, box-shadow .3s ease;
-  }
   .karte:hover {
-    border-color: rgba(34,211,238,.32);
-    box-shadow: 0 0 0 1px rgba(34,211,238,.1), 0 0 30px -8px rgba(34,211,238,.2),
+    border-color: rgba(92,240,228,.32);
+    box-shadow: 0 0 0 1px rgba(92,240,228,.1), 0 0 30px -8px rgba(92,240,228,.2),
       0 18px 40px -22px rgba(0,0,0,.95);
   }
-  .karte h2 { color: var(--akzent); opacity: .85; }
   .steuergruppe { margin-top: 12px; border-top: 1px solid var(--rand); padding-top: 10px; }
   .steuergruppe:first-child { margin-top: 0; border-top: 0; padding-top: 0; }
   .steuergruppe h3 { margin: 0 0 7px; color: var(--leise); font-size: 10px; letter-spacing: .14em; text-transform: uppercase; }
@@ -385,6 +368,7 @@ const HTML = String.raw`<!doctype html>
 </style>
 </head>
 <body>
+<div class="shell">
   <!-- Ruhebildschirm. Liegt ueber allem, bis jemand ihn wegklickt, und kommt
        nach zehn Minuten ohne Handgriff von selbst zurueck. -->
   <div class="ruhe" id="ruhe">
@@ -402,7 +386,7 @@ const HTML = String.raw`<!doctype html>
   <div id="warnungen"></div>
 
   <div class="gitter">
-    <div class="spalte">
+    <div class="spalte-links">
       <div class="karte" id="karte-lauf" style="display:none">
         <h2>Sammelauszahlung</h2>
         <div id="lauf"></div>
@@ -428,7 +412,7 @@ const HTML = String.raw`<!doctype html>
       </div>
     </div>
 
-    <div class="spalte">
+    <div class="spalte-mitte">
       <div class="kern">
         <svg class="adern" viewBox="0 0 400 260" preserveAspectRatio="none">
           <path d="M200 130 Q90 70 20 40"></path>
@@ -455,7 +439,7 @@ const HTML = String.raw`<!doctype html>
       </div>
     </div>
 
-    <div class="spalte">
+    <div class="spalte-rechts">
       <div class="karte">
         <h2>Letzte Fehler</h2>
         <div id="fehler"></div>
@@ -467,6 +451,7 @@ const HTML = String.raw`<!doctype html>
       </div>
     </div>
   </div>
+</div>
 
   <div class="leiste" id="leiste"></div>
 

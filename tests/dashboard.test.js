@@ -126,6 +126,8 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   // Die "Bilder — was er gelesen hat"-Kachel (id="bilder") ist raus, siehe
   // "Er fragt"-Abschnitt unten - der Pausieren-Knopf lebt jetzt in "leiste".
   check('keine eigene Bilder-Kachel mehr', !html.includes('id="bilder"'));
+  check('neue Design-Grundlage geladen', html.includes('Unbounded') && html.includes('--ion'));
+  check('drei benannte Spalten statt generischer .spalte', html.includes('spalte-links') && html.includes('spalte-mitte') && html.includes('spalte-rechts'));
 
   section('Pause-Knopf fuers Bildlesen');
   // Kevins eigener Knopf: nur das Bildlesen haelt an, Chat und Events nicht.
@@ -163,11 +165,13 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   section('Hintergrund');
   // Der Ruhebildschirm hat seit 20.08. ein echtes Foto, als Daten-URI direkt
   // im Skript - die Seite bleibt trotzdem eine einzige Datei und laedt
-  // nichts uebers Netz nach. Der Rest (Dashboard-Nebel, Raster) ist CSS.
-  check('Nebelschleier', html.includes('@keyframes nebel'));
+  // nichts uebers Netz nach. Der Rest (Dashboard-Tönung, Raster) ist CSS.
+  // Seit der Design-Grundlage (28.09.) ist der Hintergrund statisch statt
+  // animiert - die alte wandernde Nebelschleier-Animation samt eigenem
+  // reduced-motion-Schalter ist damit weg, nicht nur ersetzt.
+  check('Farbtönung im Hintergrund', html.includes('radial-gradient(900px 600px at 50% 18%'));
   check('Raster', html.includes('background-size: 32px 32px'));
   check('kein externer Netzwerk-Ladepfad', !/url\(\s*['"]?https?:/i.test(html));
-  check('Rücksicht auf reduzierte Bewegung', html.includes('prefers-reduced-motion'));
 
   section('Echte Messwerte');
   // Nichts in der Statusleiste ist geschaetzt - was sich nicht auslesen
