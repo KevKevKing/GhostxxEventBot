@@ -205,6 +205,15 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
   check('data/ ist tabu', session.TABU_MUSTER.includes('data/'));
   check('logs/ ist tabu', session.TABU_MUSTER.includes('logs/'));
 
+  section('Aufgabentext erwaehnt die Web-Recherche als Hilfsmittel');
+  // code-recherche/websuche.js ist an die Selbstverbesserung angebunden
+  // (nicht an den oeffentlichen Discord-Chat, siehe code-recherche/README.md)
+  // - der Aufgabentext muss der Session sagen, dass es das Werkzeug gibt.
+  const aufgabeMitRecherche = session.baueAufgabe({ titel: 'Testproblem', belege: [] });
+  check('erwaehnt sucheCode', aufgabeMitRecherche.includes('sucheCode'));
+  check('erwaehnt den Pfad zum Modul', aufgabeMitRecherche.includes('code-recherche/websuche'));
+  check('sagt, dass es nie wirft', aufgabeMitRecherche.includes('wirft nie'));
+
   section('Aufgabentext verbietet den Ausbruch aus dem Klon');
   // Der Prompt ist keine technische Grenze, aber er soll die Regel wenigstens
   // aussprechen - fuer data/ ist er sogar die HAUPTverteidigung, seit klar
