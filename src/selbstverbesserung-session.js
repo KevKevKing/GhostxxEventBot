@@ -373,6 +373,134 @@ SELBSTVERBESSERUNG_ZUSAMMENFASSUNG.md im Projekt-Root.
 `;
 }
 
+const CODE_VORSCHLAG_PROMPT = 'Lies-CODE_VORSCHLAG_AUFGABE.md-im-Projekt-Root-und-schreibe-den-Vorschlag';
+
+function baueVorschlagsAufgabe(dateiPfad) {
+  return `# Code-Vorschlag: ${dateiPfad}
+
+Lies dir \`${dateiPfad}\` in diesem Projekt an - und alles andere im
+Projekt, was du zum Verstehen brauchst (verwandte Module, Tests,
+CLAUDE.md). Du darfst frei im Projekt lesen, nicht nur diese eine Datei.
+
+## Aufgabe
+
+Schreibe GENAU EINEN konkreten, ehrlichen Verbesserungsvorschlag in
+\`CODE_VORSCHLAG.md\` im Projekt-Root. Sei konkret (Datei, ungefaehre
+Stelle, was genau du aendern wuerdest und warum) - kein allgemeines
+"koennte sauberer sein". Faellt dir nichts Nennenswertes auf, schreibe
+stattdessen genau \`(nichts Nennenswertes)\` hinein.
+
+WICHTIG: AENDERE KEINE DATEI, committe nichts, fuehre keine Tests aus - du
+sollst nur lesen und EINEN Vorschlag aufschreiben, nichts umsetzen.
+
+## Feste Grenzen (nicht verhandelbar)
+
+- **Arbeite AUSSCHLIESSLICH in diesem Arbeitsverzeichnis.** Wechsle nie in ein
+  Elternverzeichnis und nie in einen anderen Checkout desselben Projekts.
+  Suche nicht nach dem echten Arbeitsverzeichnis des laufenden Bots. Dort
+  laeuft Ghostxx gerade wirklich.
+- **Lies und schreibe nirgendwo \`data/\` oder \`logs/\`** - weder hier noch
+  irgendwo sonst auf dem Rechner. In data/ stehen Klarnamen und
+  Spielernummern von 251 Leuten.
+- Fuehre restart-bot.ps1 oder stop-bot.ps1 nicht aus. Starte den Bot nicht,
+  auch nicht direkt mit \`node src/index.js\` oder \`npm start\`.
+
+Halte dich an CLAUDE.md in diesem Projekt (Sprache, "messen nicht
+vermuten").
+`;
+}
+
+async function leseVorschlagStandard(klonPfad) {
+  const datei = path.join(klonPfad, 'CODE_VORSCHLAG.md');
+  try {
+    const inhalt = await fs.readFile(datei, 'utf8');
+    return inhalt.trim();
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Deutlich einfacher als starteSession(): es wird nie committet oder
+ * gepusht, deshalb kein Branch, kein npm ci, keine Tabu-Pruefung. Der
+ * komplette Klon wird am Ende gelöscht, unabhaengig davon, was darin
+ * geschah - nur CODE_VORSCHLAG.md wird vorher ausgelesen.
+ */
+async function starteVorschlagsSession(dateiPfad, { ausfuehren = echtAusfuehren, leseVorschlag } = {}) {
+  const klonPfad = path.join(os.tmpdir(), `ghostxx-vorschlag-${Date.now()}`);
+  let ergebnis = { ok: false, vorschlag: '', fehler: '' };
+
+  const wurzelVorher = await pruefeWurzel(ausfuehren);
+
+  try {
+    const remote = await ausfuehren('git', ['remote', 'get-url', 'origin'], { cwd: wurzel });
+    const remoteUrl = remote.code === 0 ? remote.stdout.trim() : '';
+    if (!remoteUrl) {
+      return { ...ergebnis, fehler: `Remote-URL von origin nicht lesbar: ${remote.stderr || remote.code}` };
+    }
+
+    const angelegt = await ausfuehren(
+      'git',
+      ['clone', '--branch', 'main', '--single-branch', remoteUrl, klonPfad],
+      { cwd: os.tmpdir() },
+    );
+    if (angelegt.code !== 0) {
+      return { ...ergebnis, fehler: `Klon konnte nicht angelegt werden: ${angelegt.stderr}` };
+    }
+
+    await fs.mkdir(klonPfad, { recursive: true });
+
+    // Diese Session braucht nie zu pushen oder zu fetchen (sie liest nur und
+    // schreibt CODE_VORSCHLAG.md) - das Entfernen von origin schliesst die
+    // Push-Faehigkeit technisch, nicht nur per Prompt-Anweisung. Wichtig
+    // gerade weil die Session mit --permission-mode bypassPermissions laeuft:
+    // ein Bash-Befehl darin wuerde nicht nachfragen.
+    await ausfuehren('git', ['remote', 'remove', 'origin'], { cwd: klonPfad });
+
+    await fs.writeFile(path.join(klonPfad, 'CODE_VORSCHLAG_AUFGABE.md'), baueVorschlagsAufgabe(dateiPfad));
+
+    const lauf = await ausfuehren(
+      'claude',
+      ['-p', CODE_VORSCHLAG_PROMPT, '--permission-mode', 'bypassPermissions'],
+      { cwd: klonPfad },
+    );
+
+    const vorschlag = leseVorschlag
+      ? await leseVorschlag(klonPfad)
+      : await leseVorschlagStandard(klonPfad);
+
+    const wurzelNachher = await pruefeWurzel(ausfuehren);
+    if (wurzelVorher !== null && wurzelNachher !== null && wurzelVorher !== wurzelNachher) {
+      return {
+        ...ergebnis,
+        fehler: 'Session hat den echten Checkout veraendert! '
+          + `git status in ${WURZEL_PFADE.join(', ')} des Wurzelverzeichnisses sieht nach der Session anders aus als davor. `
+          + 'Bitte SOFORT von Hand pruefen: git status und git diff im echten Arbeitsverzeichnis.',
+      };
+    }
+
+    if (lauf.code !== 0) {
+      const fehlerText = lauf.timedOut
+        ? lauf.stderr
+        : `Claude-Code-Session fehlgeschlagen: ${lauf.stderr || lauf.code}`;
+      return { ...ergebnis, fehler: fehlerText };
+    }
+
+    if (!vorschlag) {
+      return { ...ergebnis, fehler: 'Session hat keinen Vorschlag geschrieben.' };
+    }
+
+    ergebnis = { ok: true, vorschlag, fehler: '' };
+    return ergebnis;
+  } finally {
+    try {
+      await fs.rm(klonPfad, { recursive: true, force: true });
+    } catch {
+      // siehe starteSession(): Aufraeumen darf das Ergebnis nicht kippen.
+    }
+  }
+}
+
 // Diese Pruefung ist bewusst post-hoc: sie laeuft NACH dem Claude-Code-Lauf,
 // nicht in einer Sandbox waehrend dessen. Technisch koennte die Session
 // selbst pushen oder main veraendern, bevor diese Funktion ueberhaupt
@@ -671,4 +799,6 @@ module.exports = {
   // soll pruefbar bleiben, nicht nur im Kommentar behauptet werden.
   baueAufgabe,
   starteSession,
+  baueVorschlagsAufgabe,
+  starteVorschlagsSession,
 };

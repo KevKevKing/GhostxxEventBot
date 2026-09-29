@@ -18,6 +18,7 @@ const { startDashboard } = require('./dashboard');
 const { startTerminErinnerung } = require('./termin-erinnerung');
 const { startSelbstverbesserung } = require('./selbstverbesserung');
 const { startFrageErinnerung } = require('./frage-erinnerung');
+const { startCodeVorschlag } = require('./code-vorschlag');
 const { registerBildVorablesen } = require('./bild-vorablesen');
 const { registerFamilienListe } = require('./familien-liste');
 const { isReachable, pickModel, warmUp } = require('./ollama');
@@ -134,6 +135,14 @@ async function main() {
       // Stunden per echter DM, statt einer Liste zum Anklicken. Antwort per
       // simpler DM-Nachricht zurueck, siehe message-handler.js.
       startFrageErinnerung(readyClient);
+
+      // Ghost darf von sich aus per DM fragen, ob er sich eine Datei
+      // anschauen und einen Verbesserungsvorschlag machen darf - siehe
+      // docs/superpowers/specs/2026-09-29-code-vorschlaege-design.md.
+      // Kein fester Zeitplan, zwei Zustimmungsstufen, nie automatische
+      // Umsetzung. Steht unter demselben Dashboard-Schalter
+      // "selbstverbesserung" wie die echte Selbstverbesserung.
+      startCodeVorschlag(readyClient);
 
       // Ollama darf nicht blockieren: laeuft es nicht, funktionieren Events,
       // Slash-Commands und Logging trotzdem weiter. Nur das freie Chatten faellt aus.

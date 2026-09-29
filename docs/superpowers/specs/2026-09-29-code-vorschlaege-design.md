@@ -342,6 +342,31 @@ Vorschläge samt Entscheidung.
   Kein Stau von mehreren offenen Vorgängen gleichzeitig, aber auch kein
   automatisches Aufgeben — das ist für Version 1 bewusst so (Kevin
   antwortet, wenn er Zeit hat).
+- **Nachtrag (Fix-Runde nach Review):** weil zwischen der Anfrage-DM und
+  Kevins "ja" mehrere Stunden liegen können, kann die Mindestpause
+  (`ANFRAGE_ABSTAND_MS`) während eine Vorschlags-Session noch läuft schon
+  wieder abgelaufen sein — ohne Schutz würde `tick()` dann eine zweite,
+  andere Anfrage lostreten und Kevins spätes "ja" bezöge sich auf die
+  falsche Datei. Ein in-memory Merker `vorschlagLaeuft` in
+  `code-vorschlag.js` verhindert das: gesetzt direkt vor dem Start der
+  Session, in einem `finally` wieder gelöscht, von `tick()` genauso geprüft
+  wie `aktuellerLauf().laeuft`. Zusätzlich prüft `message-handler.js` beim
+  "ja" auf die Anfrage `aktuellerLauf().laeuft` (die echte
+  Reparatur-Session) noch einmal frisch — läuft die gerade, bekommt Kevin
+  eine kurze Absage und `ausstehend` bleibt stehen, sein "ja" lässt sich
+  also einfach wiederholen.
+- Diese Selbst-Vorschlags-Fehler dürfen nie selbst eine echte
+  Reparatur-Session auslösen: die Titel `Fehler beim Code-Vorschlag` und
+  `Fehler beim Code-Vorschlag (Session)` stehen deshalb in `EIGENE_FEHLER`
+  (`selbstbeobachtung.js`), analog zu den beiden bestehenden Titeln der
+  echten Selbstverbesserung.
+- Beide DM-Texte (fertiger Vorschlag, Fehlermeldung) werden vor dem Senden
+  gekappt (1800 bzw. 1200 Zeichen, mit "… (gekürzt)"-Hinweis) — Discord
+  lehnt Nachrichten über ~2000 Zeichen komplett ab, und ohne Kappung wäre
+  ein angenommener, aber zu langer Vorschlag sonst nie angekommen.
+- Suggestion-Sessions respektieren dieselbe Nachtruhe wie die übrigen
+  proaktiven Module: `tick()` prüft `istNachtruhe()` und tut zwischen 2 und
+  10 Uhr nichts.
 
 ## Tests
 

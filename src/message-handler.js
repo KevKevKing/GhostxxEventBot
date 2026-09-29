@@ -19,6 +19,8 @@ const {
 } = require('./chat-router');
 const { looksLikeCommand } = require('./intent-parser');
 const { vermerkeModellFallback } = require('./selbstbeobachtung');
+const codeVorschlag = require('./code-vorschlag');
+const { aktuellerLauf } = require('./selbstverbesserung');
 const { parseStatsFrage } = require('./stats-parser');
 const { beantworteStatsFrage } = require('./stats-answer');
 const { buildServerContext } = require('./server-wissen');
@@ -642,6 +644,53 @@ async function handleMessage(message, client) {
   if (!isDm && message.guildId !== config.guildId) return;
 
   const text = (message.content || '').replace(new RegExp(`<@!?${botId}>`, 'g'), '').trim();
+
+  // Antwort auf eine der beiden Code-Vorschlag-Zustimmungsstufen (siehe
+  // code-vorschlag.js): "darf ich schauen?" oder der fertige Vorschlag
+  // selbst. Muss VOR dem Frage-Erinnerung-Block stehen, sonst wuerde eine
+  // Antwort hier faelschlich als Antwort auf eine offene operative Frage
+  // gewertet. Beide Zustaende sind selten und ueberschneiden sich in der
+  // Praxis kaum.
+  if (isDm && text && message.author.id === config.ownerId) {
+    const ausstehend = await codeVorschlag.holeAusstehend();
+    if (ausstehend) {
+      const antwort = codeVorschlag.werteAntwortAus(text);
+      const istJa = antwort === 'ja';
+      const istNein = antwort === 'nein';
+
+      if (!istJa && !istNein) {
+        await reply(message, 'Verstehe nur "ja" oder "nein" dazu.');
+        return;
+      }
+
+      if (ausstehend.art === 'anfrage') {
+        if (istNein) {
+          await codeVorschlag.vermerkeAbgelehnteAnfrage();
+          await reply(message, 'Alles klar, dann nicht.');
+          return;
+        }
+        // Zwischen dem Versand der Anfrage-DM und Kevins "ja" koennen mehrere
+        // Stunden liegen ("wenn er Zeit hat") - in der Zwischenzeit kann eine
+        // ECHTE Reparatur-Session (nicht die Vorschlags-Session) angelaufen
+        // sein. Beide teilen sich die GPU, deshalb hier nochmal derselbe
+        // Check wie beim urspruenglichen tick(). `ausstehend` bleibt bewusst
+        // stehen (nicht geloescht) - Kevin kann sein "ja" nach der echten
+        // Session einfach nochmal schicken, statt dass die Anfrage
+        // stillschweigend verworfen wird.
+        if (aktuellerLauf().laeuft) {
+          await reply(message, 'Gerade läuft eine echte Reparatur-Session, das würde sich die Ressourcen teilen - versuch\'s gleich nochmal.');
+          return;
+        }
+        await reply(message, 'Alles klar, ich schau mir das an und melde mich.');
+        codeVorschlag.starteUndSendeVorschlag(ausstehend.datei).catch(() => null);
+        return;
+      }
+
+      await codeVorschlag.vermerkeEntscheidung(istJa ? 'angenommen' : 'abgelehnt');
+      await reply(message, istJa ? 'Gemerkt, danke.' : 'Auch gut, verworfen.');
+      return;
+    }
+  }
 
   // Antwort auf eine per DM gestellte Frage (siehe frage-erinnerung.js):
   // die naechste DM von Kevin nach einer Frage zaehlt ohne Befehl/Format als
