@@ -573,6 +573,66 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
     console.log('  (uebersprungen - nur unter win32 aussagekraeftig, dieser Lauf ist ' + process.platform + ')');
   }
 
+  section('Vorschlags-Session: erfolgreicher Lauf');
+  {
+    const aufrufeVorschlag = [];
+    const fakeAusfuehrenVorschlag = async (cmd, args) => {
+      aufrufeVorschlag.push([cmd, ...args].join(' '));
+      if (istRemoteAbfrage(cmd, args)) {
+        return { code: 0, stdout: `${REMOTE_URL}\n`, stderr: '' };
+      }
+      if (cmd === 'claude') {
+        return { code: 0, stdout: 'fertig', stderr: '' };
+      }
+      return { code: 0, stdout: '', stderr: '' };
+    };
+
+    const ergebnisVorschlag = await session.starteVorschlagsSession(
+      'src/beispiel.js',
+      { ausfuehren: fakeAusfuehrenVorschlag, leseVorschlag: async () => 'Konkreter Vorschlag zu src/beispiel.js.' },
+    );
+
+    check('Session als ok gemeldet', ergebnisVorschlag.ok === true, ergebnisVorschlag.fehler);
+    equal('Vorschlag uebernommen', ergebnisVorschlag.vorschlag, 'Konkreter Vorschlag zu src/beispiel.js.');
+    check('kein Branch angelegt', !aufrufeVorschlag.some((a) => a.startsWith('git checkout -b')));
+    check('kein npm ci', !aufrufeVorschlag.some((a) => a.startsWith('npm ci')));
+    check('kein push', !aufrufeVorschlag.some((a) => a.startsWith('git push')));
+    check('Aufgabentext nennt die Datei', session.baueVorschlagsAufgabe('src/beispiel.js').includes('src/beispiel.js'));
+    check('Aufgabentext verbietet Aenderungen', /AENDERE KEINE DATEI/i.test(session.baueVorschlagsAufgabe('src/beispiel.js').toUpperCase()));
+  }
+
+  section('Vorschlags-Session: Klon schlaegt fehl -> kein Absturz');
+  {
+    const ergebnisFehler = await session.starteVorschlagsSession(
+      'src/beispiel.js',
+      {
+        ausfuehren: async (cmd, args) => {
+          if (istRemoteAbfrage(cmd, args)) return { code: 0, stdout: `${REMOTE_URL}\n`, stderr: '' };
+          if (cmd === 'git' && args[0] === 'clone') return { code: 1, stdout: '', stderr: 'kaputt' };
+          return { code: 0, stdout: '', stderr: '' };
+        },
+      },
+    );
+    check('Kein Absturz, ok:false', ergebnisFehler.ok === false);
+    check('Fehlertext vorhanden', ergebnisFehler.fehler.includes('Klon'));
+  }
+
+  section('Vorschlags-Session: leerer Vorschlag zaehlt als Fehler');
+  {
+    const ergebnisLeer = await session.starteVorschlagsSession(
+      'src/beispiel.js',
+      {
+        ausfuehren: async (cmd, args) => {
+          if (istRemoteAbfrage(cmd, args)) return { code: 0, stdout: `${REMOTE_URL}\n`, stderr: '' };
+          if (cmd === 'claude') return { code: 0, stdout: '', stderr: '' };
+          return { code: 0, stdout: '', stderr: '' };
+        },
+        leseVorschlag: async () => '',
+      },
+    );
+    check('Kein Vorschlag -> ok:false', ergebnisLeer.ok === false);
+  }
+
   section('Token bleiben dem Kindprozess verborgen');
   // Regressionstest: ohne diesen Filter erbt die Claude-Code-Session das
   // komplette process.env des laufenden Bots - inklusive Discord-Token.
