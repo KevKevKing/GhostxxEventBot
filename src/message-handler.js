@@ -20,6 +20,7 @@ const {
 const { looksLikeCommand } = require('./intent-parser');
 const { vermerkeModellFallback } = require('./selbstbeobachtung');
 const codeVorschlag = require('./code-vorschlag');
+const { aktuellerLauf } = require('./selbstverbesserung');
 const { parseStatsFrage } = require('./stats-parser');
 const { beantworteStatsFrage } = require('./stats-answer');
 const { buildServerContext } = require('./server-wissen');
@@ -653,9 +654,9 @@ async function handleMessage(message, client) {
   if (isDm && text && message.author.id === config.ownerId) {
     const ausstehend = await codeVorschlag.holeAusstehend();
     if (ausstehend) {
-      const antwort = text.trim().toLowerCase();
-      const istJa = antwort.startsWith('ja');
-      const istNein = antwort.startsWith('nein');
+      const antwort = codeVorschlag.werteAntwortAus(text);
+      const istJa = antwort === 'ja';
+      const istNein = antwort === 'nein';
 
       if (!istJa && !istNein) {
         await reply(message, 'Verstehe nur "ja" oder "nein" dazu.');
@@ -666,6 +667,18 @@ async function handleMessage(message, client) {
         if (istNein) {
           await codeVorschlag.vermerkeAbgelehnteAnfrage();
           await reply(message, 'Alles klar, dann nicht.');
+          return;
+        }
+        // Zwischen dem Versand der Anfrage-DM und Kevins "ja" koennen mehrere
+        // Stunden liegen ("wenn er Zeit hat") - in der Zwischenzeit kann eine
+        // ECHTE Reparatur-Session (nicht die Vorschlags-Session) angelaufen
+        // sein. Beide teilen sich die GPU, deshalb hier nochmal derselbe
+        // Check wie beim urspruenglichen tick(). `ausstehend` bleibt bewusst
+        // stehen (nicht geloescht) - Kevin kann sein "ja" nach der echten
+        // Session einfach nochmal schicken, statt dass die Anfrage
+        // stillschweigend verworfen wird.
+        if (aktuellerLauf().laeuft) {
+          await reply(message, 'Gerade läuft eine echte Reparatur-Session, das würde sich die Ressourcen teilen - versuch\'s gleich nochmal.');
           return;
         }
         await reply(message, 'Alles klar, ich schau mir das an und melde mich.');

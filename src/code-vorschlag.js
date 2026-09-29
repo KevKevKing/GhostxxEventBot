@@ -6,6 +6,7 @@ const { logError } = require('./logger');
 const { istAn } = require('./steuerung');
 const { starteVorschlagsSession } = require('./selbstverbesserung-session');
 const { aktuellerLauf } = require('./selbstverbesserung');
+const { istNachtruhe } = require('./selbstverbesserung-limit');
 
 // Ghost darf von sich aus fragen, ob er sich eine Datei anschauen und einen
 // Verbesserungsvorschlag machen darf - kein fester Zeitplan, keine
@@ -18,12 +19,45 @@ const { aktuellerLauf } = require('./selbstverbesserung');
 
 const ANFRAGE_ABSTAND_MS = 3 * 60 * 60 * 1000;
 const VERLAUF_MAX = 100;
+// Discord-DMs vertragen maximal ~2000 Zeichen - ein user.send() darueber
+// wirft. 1800 statt voller 2000 laesst Platz fuer den umgebenden DM-Text
+// (Dateiname, Hinweiszeile). Analog zu den .slice(0, N)-Kappungen anderswo
+// im Projekt (z.B. message-handler.js MAX_REPLY_LENGTH, handlers.js 1900).
+const VORSCHLAG_TEXT_MAX = 1800;
+const FEHLER_TEXT_MAX = 1200;
 const standDatei = path.join(config.dataDir, 'code-vorschlaege.json');
 
 let dmClient = null;
+// Waehrend eine Vorschlags-Session laeuft (bis zu ~20 Min), darf tick() keine
+// neue Gate-1-Anfrage verschicken - sonst koennte Kevins spaetes "ja" auf die
+// ALTE Anfrage sich auf eine inzwischen laengst neu angefragte Datei beziehen.
+// Rein im Speicher (kein Neustart-Schutz noetig): ein Bot-Neustart waehrend
+// einer laufenden Session verwirft die Session ohnehin komplett.
+let vorschlagLaeuft = false;
 
 function setClient(client) {
   dmClient = client;
+}
+
+function laeuftGerade() {
+  return vorschlagLaeuft;
+}
+
+/**
+ * Interpretiert Kevins DM-Antwort. Bewusst nicht `startsWith('ja')`, weil das
+ * auch "Januar" oder "Jahreswechsel" als Zustimmung werten wuerde - \b sorgt
+ * dafuer, dass nach "ja"/"nein" eine Wortgrenze kommt.
+ */
+function werteAntwortAus(text) {
+  const normalisiert = (text || '').trim().toLowerCase();
+  if (/^ja\b/.test(normalisiert)) return 'ja';
+  if (/^nein\b/.test(normalisiert)) return 'nein';
+  return null;
+}
+
+function kuerze(text, max) {
+  const wert = String(text || '');
+  return wert.length > max ? `${wert.slice(0, max)}… (gekürzt)` : wert;
 }
 
 async function ladeStand() {
@@ -125,6 +159,7 @@ async function vermerkeAbgelehnteAnfrage() {
  * ruft das per .catch(() => null) im Hintergrund auf.
  */
 async function starteUndSendeVorschlag(dateiPfad, { starteSession = starteVorschlagsSession, sendeDm = sendeDmStandard } = {}) {
+  vorschlagLaeuft = true;
   try {
     const stand = await ladeStand();
     stand.ausstehend = null;
@@ -133,12 +168,12 @@ async function starteUndSendeVorschlag(dateiPfad, { starteSession = starteVorsch
     const ergebnis = await starteSession(dateiPfad);
 
     if (!ergebnis.ok) {
-      await sendeDm(`Hat leider nicht geklappt: ${ergebnis.fehler}`).catch(() => null);
+      await sendeDm(`Hat leider nicht geklappt: ${kuerze(ergebnis.fehler, FEHLER_TEXT_MAX)}`).catch(() => null);
       return;
     }
 
     await sendeDm(
-      `${ergebnis.vorschlag}\n\n_Vorschlag zu ${dateiPfad}_\n\n`
+      `${kuerze(ergebnis.vorschlag, VORSCHLAG_TEXT_MAX)}\n\n_Vorschlag zu ${dateiPfad}_\n\n`
       + 'Antworte mit "ja" oder "nein" - "ja" heisst nur "gute Idee, merken", '
       + 'ich aendere dadurch noch nichts automatisch.',
     );
@@ -154,6 +189,8 @@ async function starteUndSendeVorschlag(dateiPfad, { starteSession = starteVorsch
   } catch (error) {
     console.error('Code-Vorschlag (Session) fehlgeschlagen:', error.message);
     logError('Fehler beim Code-Vorschlag (Session)', error);
+  } finally {
+    vorschlagLaeuft = false;
   }
 }
 
@@ -170,7 +207,9 @@ async function vermerkeEntscheidung(status) {
 async function tick() {
   try {
     if (!istAn('selbstverbesserung')) return;
+    if (istNachtruhe()) return;
     if (aktuellerLauf().laeuft) return;
+    if (vorschlagLaeuft) return;
     if (!(await darfFragen())) return;
     await sendeAnfrage();
   } catch (error) {
@@ -201,6 +240,7 @@ module.exports = {
   ANFRAGE_ABSTAND_MS,
   darfFragen,
   holeAusstehend,
+  laeuftGerade,
   naechsteDatei,
   sendeAnfrage,
   setClient,
@@ -208,4 +248,5 @@ module.exports = {
   starteUndSendeVorschlag,
   vermerkeAbgelehnteAnfrage,
   vermerkeEntscheidung,
+  werteAntwortAus,
 };

@@ -61,6 +61,16 @@ section('naechsteDatei: rotiert durch eine Liste');
   check('Fehler-DM verschickt', fehlerDms.some((t) => t.includes('kaputt') || t.toLowerCase().includes('nicht geklappt')));
   check('kein ausstehender Vorschlag nach Fehlschlag', (await codeVorschlag.holeAusstehend()) === null);
 
+  section('werteAntwortAus: nur echtes ja/nein, keine Wort-Praefix-Verwechslung');
+  equal('"ja" wird erkannt', codeVorschlag.werteAntwortAus('ja'), 'ja');
+  equal('"Ja" wird erkannt', codeVorschlag.werteAntwortAus('Ja'), 'ja');
+  equal('"JA " wird erkannt', codeVorschlag.werteAntwortAus('JA '), 'ja');
+  equal('"nein" wird erkannt', codeVorschlag.werteAntwortAus('nein'), 'nein');
+  equal('"Nein" wird erkannt', codeVorschlag.werteAntwortAus('Nein'), 'nein');
+  equal('"Januar" ist KEIN ja', codeVorschlag.werteAntwortAus('Januar'), null);
+  equal('"Jahreswechsel" ist KEIN ja', codeVorschlag.werteAntwortAus('Jahreswechsel'), null);
+  equal('unrelated Text -> null', codeVorschlag.werteAntwortAus('wann ist das naechste Event?'), null);
+
   temp.cleanup();
   finish();
 })();

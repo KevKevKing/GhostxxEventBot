@@ -393,6 +393,18 @@ stattdessen genau \`(nichts Nennenswertes)\` hinein.
 WICHTIG: AENDERE KEINE DATEI, committe nichts, fuehre keine Tests aus - du
 sollst nur lesen und EINEN Vorschlag aufschreiben, nichts umsetzen.
 
+## Feste Grenzen (nicht verhandelbar)
+
+- **Arbeite AUSSCHLIESSLICH in diesem Arbeitsverzeichnis.** Wechsle nie in ein
+  Elternverzeichnis und nie in einen anderen Checkout desselben Projekts.
+  Suche nicht nach dem echten Arbeitsverzeichnis des laufenden Bots. Dort
+  laeuft Ghostxx gerade wirklich.
+- **Lies und schreibe nirgendwo \`data/\` oder \`logs/\`** - weder hier noch
+  irgendwo sonst auf dem Rechner. In data/ stehen Klarnamen und
+  Spielernummern von 251 Leuten.
+- Fuehre restart-bot.ps1 oder stop-bot.ps1 nicht aus. Starte den Bot nicht,
+  auch nicht direkt mit \`node src/index.js\` oder \`npm start\`.
+
 Halte dich an CLAUDE.md in diesem Projekt (Sprache, "messen nicht
 vermuten").
 `;
@@ -437,6 +449,13 @@ async function starteVorschlagsSession(dateiPfad, { ausfuehren = echtAusfuehren,
     }
 
     await fs.mkdir(klonPfad, { recursive: true });
+
+    // Diese Session braucht nie zu pushen oder zu fetchen (sie liest nur und
+    // schreibt CODE_VORSCHLAG.md) - das Entfernen von origin schliesst die
+    // Push-Faehigkeit technisch, nicht nur per Prompt-Anweisung. Wichtig
+    // gerade weil die Session mit --permission-mode bypassPermissions laeuft:
+    // ein Bash-Befehl darin wuerde nicht nachfragen.
+    await ausfuehren('git', ['remote', 'remove', 'origin'], { cwd: klonPfad });
 
     await fs.writeFile(path.join(klonPfad, 'CODE_VORSCHLAG_AUFGABE.md'), baueVorschlagsAufgabe(dateiPfad));
 

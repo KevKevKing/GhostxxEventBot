@@ -601,6 +601,42 @@ section('Erfolgreicher Lauf ohne Tabu-Verstoss');
     check('Aufgabentext verbietet Aenderungen', /AENDERE KEINE DATEI/i.test(session.baueVorschlagsAufgabe('src/beispiel.js').toUpperCase()));
   }
 
+  section('Vorschlags-Session: origin wird nach dem Klonen entfernt');
+  {
+    // Diese Session braucht nie Netzwerkzugriff auf GitHub (sie liest nur und
+    // schreibt CODE_VORSCHLAG.md) - `git remote remove origin` schliesst die
+    // Push-Faehigkeit technisch, unabhaengig davon, was der Prompt sagt oder
+    // was das Modell waehrend --permission-mode bypassPermissions tut.
+    const aufrufeOrigin = [];
+    const fakeAusfuehrenOrigin = async (cmd, args, options = {}) => {
+      aufrufeOrigin.push({ cmd, args, cwd: options.cwd });
+      if (istRemoteAbfrage(cmd, args)) {
+        return { code: 0, stdout: `${REMOTE_URL}\n`, stderr: '' };
+      }
+      if (cmd === 'claude') {
+        return { code: 0, stdout: 'fertig', stderr: '' };
+      }
+      return { code: 0, stdout: '', stderr: '' };
+    };
+
+    const ergebnisOrigin = await session.starteVorschlagsSession(
+      'src/beispiel.js',
+      { ausfuehren: fakeAusfuehrenOrigin, leseVorschlag: async () => 'Ein Vorschlag.' },
+    );
+
+    check('Session als ok gemeldet', ergebnisOrigin.ok === true, ergebnisOrigin.fehler);
+    const entferntAufruf = aufrufeOrigin.find(
+      ({ cmd, args }) => cmd === 'git' && args[0] === 'remote' && args[1] === 'remove' && args[2] === 'origin',
+    );
+    check('git remote remove origin wurde aufgerufen', Boolean(entferntAufruf));
+
+    const klonIndex = aufrufeOrigin.findIndex(({ cmd, args }) => cmd === 'git' && args[0] === 'clone');
+    const entferntIndex = aufrufeOrigin.findIndex(
+      ({ cmd, args }) => cmd === 'git' && args[0] === 'remote' && args[1] === 'remove' && args[2] === 'origin',
+    );
+    check('Entfernt wird ERST NACH dem Klonen', klonIndex !== -1 && entferntIndex !== -1 && entferntIndex > klonIndex);
+  }
+
   section('Vorschlags-Session: Klon schlaegt fehl -> kein Absturz');
   {
     const ergebnisFehler = await session.starteVorschlagsSession(
