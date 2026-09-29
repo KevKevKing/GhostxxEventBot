@@ -19,6 +19,7 @@ const {
 } = require('./chat-router');
 const { looksLikeCommand } = require('./intent-parser');
 const { vermerkeModellFallback } = require('./selbstbeobachtung');
+const codeVorschlag = require('./code-vorschlag');
 const { parseStatsFrage } = require('./stats-parser');
 const { beantworteStatsFrage } = require('./stats-answer');
 const { buildServerContext } = require('./server-wissen');
@@ -642,6 +643,41 @@ async function handleMessage(message, client) {
   if (!isDm && message.guildId !== config.guildId) return;
 
   const text = (message.content || '').replace(new RegExp(`<@!?${botId}>`, 'g'), '').trim();
+
+  // Antwort auf eine der beiden Code-Vorschlag-Zustimmungsstufen (siehe
+  // code-vorschlag.js): "darf ich schauen?" oder der fertige Vorschlag
+  // selbst. Muss VOR dem Frage-Erinnerung-Block stehen, sonst wuerde eine
+  // Antwort hier faelschlich als Antwort auf eine offene operative Frage
+  // gewertet. Beide Zustaende sind selten und ueberschneiden sich in der
+  // Praxis kaum.
+  if (isDm && text && message.author.id === config.ownerId) {
+    const ausstehend = await codeVorschlag.holeAusstehend();
+    if (ausstehend) {
+      const antwort = text.trim().toLowerCase();
+      const istJa = antwort.startsWith('ja');
+      const istNein = antwort.startsWith('nein');
+
+      if (!istJa && !istNein) {
+        await reply(message, 'Verstehe nur "ja" oder "nein" dazu.');
+        return;
+      }
+
+      if (ausstehend.art === 'anfrage') {
+        if (istNein) {
+          await codeVorschlag.vermerkeAbgelehnteAnfrage();
+          await reply(message, 'Alles klar, dann nicht.');
+          return;
+        }
+        await reply(message, 'Alles klar, ich schau mir das an und melde mich.');
+        codeVorschlag.starteUndSendeVorschlag(ausstehend.datei).catch(() => null);
+        return;
+      }
+
+      await codeVorschlag.vermerkeEntscheidung(istJa ? 'angenommen' : 'abgelehnt');
+      await reply(message, istJa ? 'Gemerkt, danke.' : 'Auch gut, verworfen.');
+      return;
+    }
+  }
 
   // Antwort auf eine per DM gestellte Frage (siehe frage-erinnerung.js):
   // die naechste DM von Kevin nach einer Frage zaehlt ohne Befehl/Format als
