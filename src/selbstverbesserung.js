@@ -45,7 +45,9 @@ async function tick({
 
   await benachrichtigung.sendeAusstehende();
 
-  const problem = (await beobachten.crashSchleifeErkannt()) || (await beobachten.erkenneProblem());
+  const problem = (await beobachten.crashSchleifeErkannt())
+    || (await beobachten.erkenneProblem())
+    || (await beobachten.parserFehlschlagErkannt());
   if (!problem) return;
 
   const stand = await limit.darfLaufen();
