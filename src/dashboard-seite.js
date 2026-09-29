@@ -285,6 +285,18 @@ const HTML = String.raw`<!doctype html>
               font: 12px/1.5 Consolas, monospace; color: #7fd4e8;
               white-space: pre-wrap; word-break: break-word; }
   #anmeldungen { max-height: 24vh; overflow-y: auto; }
+  .anmeldung-zeile { padding: 6px 0; border-bottom: 1px solid var(--rand); }
+  .anmeldung-zeile:last-child { border-bottom: none; }
+  .anmeldung-kopf { display: flex; align-items: center; gap: 8px; }
+  .anmeldung-kopf b { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .anmeldung-fuss { display: flex; align-items: center; gap: 8px; margin-top: 5px; }
+  .anmeldung-fuss .balken { flex: 1 1 auto; min-width: 40px; }
+  .absagen-knopf {
+    flex-shrink: 0; margin-left: auto; width: 20px; height: 20px; padding: 0; line-height: 1;
+    font-size: 12px; color: var(--leise); background: transparent; border: 1px solid var(--rand);
+    border-radius: 4px; cursor: pointer;
+  }
+  .absagen-knopf:hover { color: var(--schlecht); border-color: #5a1f24; }
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-thumb { background: #1d4460; border-radius: 8px; }
   ::-webkit-scrollbar-track { background: transparent; }
@@ -519,10 +531,15 @@ function zeichneLeiste(s, bilder) {
 // Die frueher hier gezeichnete "Bilder — was er gelesen hat"-Kachel (Bestand,
 // Chronik) ist raus - der Pausieren-Knopf lebt jetzt in zeichneLeiste() oben.
 
+// Eigene Zeilen statt einer <table>: bei sechs Spalten (Art, Titel, Balken,
+// Zahl, Frist, Absagen-Knopf) passt eine Tabellenzeile nicht mehr in die
+// schmale linke Spalte (300px) - der Knopf wurde dabei rechts aus dem
+// sichtbaren Bereich geschoben, ohne erkennbaren Scrollbalken. Zwei Zeilen
+// pro Anmeldung, die von selbst umbrechen, brauchen keine feste Breite.
 function zeichneAnmeldungen(liste) {
   if (!liste.length) return '<div class="nichts">Gerade ist nichts offen.</div>';
 
-  return '<table>' + liste.map((a) => {
+  return liste.map((a) => {
     const klasse = a.dabei >= a.max && a.max ? 'voll'
       : (a.schliesstIn !== null && a.schliesstIn <= 6 && a.anteil >= 0.6 ? 'knapp' : '');
     const markeKlasse = a.art === 'Selbst erstellt' ? 'm-selbst'
@@ -531,18 +548,22 @@ function zeichneAnmeldungen(liste) {
       ? (a.offenSeitStunden > 48 ? 'seit ' + Math.round(a.offenSeitStunden / 24) + ' Tagen offen' : 'offen')
       : (a.schliesstIn <= 0 ? 'schließt gleich' : 'noch ' + a.schliesstIn + ' Min');
 
-    return '<tr>'
-      + '<td><span class="marke ' + markeKlasse + '">' + sicher(a.art) + '</span></td>'
-      + '<td><b>' + sicher(a.titel) + '</b>'
-        + (a.gegner ? ' <span class="leise">' + sicher(a.gegner) + '</span>' : '') + '</td>'
-      + '<td style="width:110px">' + balken(a.anteil, klasse) + '</td>'
-      + '<td class="zahl">' + a.dabei + '/' + (a.max || '?')
-        + (a.ersatz ? ' <span class="leise">+' + a.ersatz + '</span>' : '') + '</td>'
-      + '<td class="zahl leise">' + schliesst + '</td>'
-      + '<td><button class="absagen-knopf" data-id="' + sicher(a.id) + '" '
-        + 'title="Diese Anmeldung absagen">✕</button></td>'
-      + '</tr>';
-  }).join('') + '</table>';
+    return '<div class="anmeldung-zeile">'
+      + '<div class="anmeldung-kopf">'
+        + '<span class="marke ' + markeKlasse + '">' + sicher(a.art) + '</span>'
+        + '<b>' + sicher(a.titel) + '</b>'
+        + (a.gegner ? ' <span class="leise">' + sicher(a.gegner) + '</span>' : '')
+        + '<button class="absagen-knopf" data-id="' + sicher(a.id) + '" '
+          + 'title="Diese Anmeldung absagen">✕</button>'
+      + '</div>'
+      + '<div class="anmeldung-fuss">'
+        + balken(a.anteil, klasse)
+        + '<span class="zahl">' + a.dabei + '/' + (a.max || '?')
+          + (a.ersatz ? ' <span class="leise">+' + a.ersatz + '</span>' : '') + '</span>'
+        + '<span class="zahl leise">' + schliesst + '</span>'
+      + '</div>'
+    + '</div>';
+  }).join('');
 }
 
 function zeichneLauf(l) {
