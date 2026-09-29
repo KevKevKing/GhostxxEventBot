@@ -9,126 +9,168 @@ einen erkannten Fehler, eigenen Code anschaut und ehrliche
 Verbesserungsvorschläge macht — die Vorschläge sollen echt von Ghost selbst
 kommen, nicht vorgegeben oder simuliert sein.
 
-Bewusst als **kleinster, sicherster erster Schritt**: einmal am Tag eine
-Datei ansehen, **nur einen Text-Vorschlag** schreiben (keine Code-Änderung),
-per DM zustellen, Kevin sagt ja/nein. Bei "ja" wird das nur vermerkt — es
-löst **keine** automatische Umsetzung aus. Der Grund: das ist die erste
-Fähigkeit, bei der Ghost selbst der Ideengeber ist, ganz ohne einen echten
-Anlass dahinter — bevor sowas automatisch Code ändern darf, will Kevin erst
-eine Weile echte Vorschläge sehen und einschätzen können, wie gut sie sind.
-Der Umstieg auf "ja = automatisch umsetzen" ist danach eine kleine,
-spätere Änderung, kein Neubau.
+**Überarbeitet gegenüber der ersten Fassung dieser Spec** (nach Rücksprache
+mit Kevin): kein fester Zeitplan, kein 1x/Tag-Limit, kein Zwang auf genau
+eine Datei — Ghost darf jederzeit von sich aus schauen wollen und dabei so
+viel vom Repo lesen, wie er für den Kontext braucht. Zur Sicherheit dafür
+im Gegenzug ein **zweistufiges Ja/Nein statt einem**: Ghost fragt zuerst
+**bevor** er überhaupt eine Session startet ("darf ich mir X anschauen?"),
+erst nach einem "Ja" darauf läuft die eigentliche, lesende Session, und der
+fertige Vorschlag bekommt danach nochmal ein eigenes Ja/Nein. Nichts wird
+automatisch umgesetzt — bei beiden Ja/Nein-Schritten geht es nur um
+Zustimmung, nie um eine ausgeführte Code-Änderung.
+
+Der Grund für das zweistufige Vorgehen: das ist die erste Fähigkeit, bei
+der Ghost selbst der Ideengeber ist, ganz ohne einen echten Anlass
+dahinter. Ohne die erste Zustimmungsstufe könnte Ghost beliebig oft am Tag
+eine mehrere Minuten laufende Claude-Code-Session starten (teilt sich die
+GPU mit GTA, siehe CLAUDE.md) — die erste Frage macht daraus etwas, das
+nur passiert, wenn Kevin gerade wirklich will.
 
 ## Ziel
 
-- Einmal am Tag: eine Datei aus `src/` ansehen (alphabetisch der Reihe
-  nach, ähnliches Rotationsprinzip wie das bestehende Bild-Vorablesen
-  "A-Z"), eine isolierte Claude-Code-Session lesen und **nur einen Text**
-  mit einem konkreten Verbesserungsvorschlag schreiben lassen — keine
-  Code-Änderung, kein Commit, keine Tests.
-- Den Vorschlag per echter Discord-DM an Kevin zustellen (gleiches Prinzip
-  wie `frage-erinnerung.js`).
-- Kevin antwortet direkt in der DM mit ja/nein. Das Ergebnis wird
-  vermerkt — mehr nicht.
+- Ghost entscheidet selbst, **wann** er etwas anschauen möchte — kein
+  fester Zeitplan, keine Tagesobergrenze.
+- **Bevor** er dafür eine Session startet, fragt er Kevin per DM um
+  Erlaubnis ("darf ich mir X anschauen?").
+- Nur nach einem "Ja" läuft eine isolierte, rein lesende Claude-Code-
+  Session, die frei im Repo lesen darf (nicht nur eine einzelne Datei) und
+  **nur einen Text**-Vorschlag schreibt — keine Code-Änderung, kein
+  Commit, keine Tests.
+- Der fertige Vorschlag kommt per DM, Kevin sagt nochmal ja/nein dazu. Das
+  Ergebnis wird vermerkt — mehr nicht.
+- Eine kleine Mindestpause zwischen zwei "darf ich schauen?"-Anfragen
+  verhindert DM-Spam, falls Kevin ablehnt oder nicht antwortet (siehe
+  Abschnitt 2) — das ist eine technische Notwendigkeit, keine inhaltliche
+  Einschränkung von "jederzeit".
 
 ## Nicht-Ziele (bewusst für später zurückgestellt)
 
-- **Keine automatische Umsetzung bei "ja".** Das ist der wichtigste
-  Unterschied zur bestehenden Selbstverbesserung: dort startet ein
-  erkanntes Problem sofort eine echte, code-ändernde Session. Hier läuft
-  die code-ändernde Session **nie** automatisch — "ja" heißt nur "gute
-  Idee", nicht "jetzt umsetzen". Die Umsetzung ist ein bewusster,
-  separater, späterer Schritt (durch Kevin oder mich).
+- **Keine automatische Umsetzung, auf keiner der beiden Zustimmungsstufen.**
+  Weder "ja, schau dir das an" noch "ja, guter Vorschlag" lösen eine
+  code-ändernde Session aus. Die Umsetzung eines angenommenen Vorschlags
+  ist ein bewusster, separater, späterer Schritt (durch Kevin oder mich).
 - **Kein Dashboard-Eintrag.** Nur die DM. Eine Dashboard-Kachel für
-  offene/angenommene Vorschläge ist ein sinnvoller späterer Ausbau, sobald
-  sich zeigt, dass sich Vorschläge häufen.
-- **Kein Text-Ähnlichkeits-Check gegen frühere Vorschläge.** Falls Ghost
-  wiederholt Ähnliches vorschlägt, fällt das erstmal Kevin selbst auf
-  (er sieht ja jede einzelne DM) — automatische Erkennung ist ein
-  möglicher späterer Schritt, kein Teil von Version 1.
+  offene/angenommene Vorschläge ist ein sinnvoller späterer Ausbau.
+- **Kein Text-Ähnlichkeits-Check gegen frühere Vorschläge.** Fällt erstmal
+  Kevin selbst auf (er sieht ja jede einzelne DM).
 - **Keine Änderung an der bestehenden Selbstverbesserung** (Absturz-/
   Fehler-/Parser-Erkennung, 5/Tag-Limit, Tabu-Pfade). Läuft komplett
   unverändert weiter, parallel zu diesem neuen, separaten Mechanismus.
-- **Kein Bezug zur Sprachsteuerung** (PR #5). Kevins Erwähnung, dass Ghost
-  "irgendwann von selbst mit ihm reden" soll, ist die langfristige
-  Richtung (siehe Gedächtnis-Eintrag zur Jarvis-Vision), aber nicht Teil
-  dieser Spec — die DM-Zustellung hier ist Text, wie bei
-  `frage-erinnerung.js`.
+- **Kein Bezug zur Sprachsteuerung** (PR #5). Die DM-Zustellung hier ist
+  Text, wie bei `frage-erinnerung.js` — Sprache ist eine spätere,
+  eigenständige Richtung (siehe Gedächtnis-Eintrag zur Jarvis-Vision).
 
 ## Architektur-Überblick
 
 ```
-tick() (neuer Scheduler, alle 10 Min wie selbstverbesserung.js)
+tick() (neuer Scheduler, alle 10 Min)
         |
         v
-darfHeuteLaufen()?  <- eigener Tages-Zaehler, getrennt vom 5/Tag-Limit
-        |  (nein -> nichts tun)
+schalterAn('selbstverbesserung')?  <- dieselbe Freigabe wie die echte
+        |  (nein -> nichts tun)       Selbstverbesserung, kein neuer Schalter
+        v
+liegt schon eine unbeantwortete Anfrage ODER ein unbeantworteter
+Vorschlag vor (ausstehend != null)?
+        |  (ja -> nichts tun, erst Kevins Antwort abwarten)
         v
 laeuft schon eine echte Fix-Session (aktuellerLauf().laeuft)?
-        |  (ja -> nichts tun, naechster Tick versucht's wieder)
+        |  (ja -> nichts tun)
         v
-naechsteDatei()     <- Rotationszeiger, A-Z durch src/*.js
+seit der letzten Anfrage genug Zeit vergangen (Mindestpause)?
+        |  (nein -> nichts tun)
+        v
+naechsteDatei()     <- einfache Rotation als Vorschlag, WAS er sich anschaut
         |
+        v
+sendeAnfrage(datei)   neue DM: "darf ich mir X anschauen?"
+   ausstehend = { art: 'anfrage', datei, gesendetAm }
+        |
+        v
+Kevin antwortet ja/nein (message-handler.js)
+        |
+   nein -> ausstehend = null, fertig (naechste Anfrage erst nach der Mindestpause)
+        |
+   ja
         v
 starteVorschlagsSession(datei)   neu, in selbstverbesserung-session.js
   - git clone main (KEIN eigener Branch, kein npm ci, kein Commit)
   - schreibt CODE_VORSCHLAG_AUFGABE.md, startet claude -p ... bypassPermissions
+  - darf im Klon frei lesen, nicht nur die eine Datei
   - liest NUR CODE_VORSCHLAG.md zurueck
   - loescht den kompletten Klon danach, unabhaengig davon, was darin geschah
         |
         v
-sendeVorschlag(vorschlag)   neue DM an Kevin, wie frage-erinnerung.js
+sendeVorschlag(vorschlag)   zweite DM
+   ausstehend = { art: 'vorschlag', datei, vorschlag, gesendetAm }
         |
         v
-Kevin antwortet ja/nein in der DM (message-handler.js, neuer Abschnitt)
+Kevin antwortet ja/nein
         |
         v
 vermerkeEntscheidung(...)   -> nur Protokoll, KEINE weitere Aktion
+   ausstehend = null
 ```
 
-## 1) Rotation: welche Datei ist als Nächstes dran?
+## 1) Was Ghost als Nächstes vorschlägt anzuschauen
 
-Neues, kleines Modul `src/code-vorschlag.js` haelt einen Rotationszeiger
-(`zuletztDatei`) in einer eigenen Datei (`data/code-vorschlaege.json`).
+Neues, kleines Modul `src/code-vorschlag.js` schlägt selbst vor, was als
+Nächstes drankommt — technisch per einfacher Rotation (kein Zufall, damit
+garantiert irgendwann alles einmal drankommt, nicht dieselbe Datei mehrfach
+hintereinander):
 
 ```js
 async function naechsteDatei() {
   const dateien = (await fs.readdir(path.join(__dirname)))
     .filter((name) => name.endsWith('.js'))
     .sort();
-  // ...
+  // Naechste nach der zuletzt VORGESCHLAGENEN (nicht: zuletzt vom Modell
+  // gelesenen - die Session darf beim eigentlichen Lesen ja querlesen,
+  // das hier ist nur der Ausgangspunkt fuer die Anfrage-DM).
 }
 ```
+
+Die Rotation entscheidet nur, **worüber die Anfrage-DM redet** ("darf ich
+mir `src/xyz.js` anschauen?"). Sagt Kevin ja, darf die eigentliche Session
+danach frei im Repo lesen, was sie für den Kontext braucht (siehe
+Abschnitt 3) — die eine Datei ist der Ausgangspunkt, keine Einschränkung.
 
 - Liste: alle `.js`-Dateien direkt in `src/` (nicht rekursiv — passt zu
   "63 Module in `src/`, ein Thema pro Datei" aus CLAUDE.md), alphabetisch
   sortiert.
-- Nach der zuletzt angesehenen Datei kommt die naechste in der Liste; am
-  Ende der Liste geht es wieder bei der ersten los.
-- Ist die zuletzt gemerkte Datei nicht mehr in der Liste (umbenannt/
-  geloescht), wird wieder bei der ersten Datei alphabetisch begonnen.
+- Ist die zuletzt vorgeschlagene Datei nicht mehr in der Liste (umbenannt/
+  gelöscht), wird wieder bei der ersten Datei alphabetisch begonnen.
 
-## 2) Der Tages-Zaehler
+## 2) Wann darf Ghost (wieder) fragen?
 
-Eigene, von `selbstverbesserung-limit.js` komplett getrennte Zaehlung
-(gleiches Muster: Datumsstempel in Berliner Zeit, `getBerlinDateStamp()`),
-weil das hier ein anderer Mechanismus mit anderer Bremse ist (1/Tag, nicht
-5/Tag) und nicht mit dem Limit der echten Fix-Sessions vermischt werden
-soll.
+Kein fester Zeitplan, keine Tagesobergrenze — aber drei Bedingungen, rein
+technisch nötig, keine inhaltliche Einschränkung:
+
+1. **Kein Zustand gerade offen.** Es gibt höchstens EINE unbeantwortete
+   Sache gleichzeitig — entweder eine offene "darf ich schauen?"-Anfrage
+   oder einen offenen fertigen Vorschlag, nie beides gleichzeitig, nie
+   mehrere Anfragen gestapelt. Erst wenn Kevin geantwortet hat, kann die
+   nächste Anfrage kommen.
+2. **Keine echte Fix-Session läuft gerade** (`selbstverbesserung.
+   aktuellerLauf().laeuft`) — teilt sich sonst unnötig die GPU.
+3. **Mindestpause seit der letzten Anfrage** (Vorschlag: 3 Stunden,
+   `ANFRAGE_ABSTAND_MS`) — reine Anti-Spam-Bremse für den Fall, dass Kevin
+   ablehnt oder nicht antwortet. Ohne diese Bremse würde jeder folgende
+   10-Minuten-Tick sofort wieder eine neue Anfrage schicken.
 
 ```js
-async function darfHeuteLaufen() {
-  const stand = await ladeStand(); // { datum, gelaufenAm: iso|null }
-  const heute = getBerlinDateStamp();
-  if (stand.datum === heute && stand.gelaufenAm) return false;
-  return true;
+async function darfFragen() {
+  const stand = await ladeStand();
+  if (stand.ausstehend) return false;
+  const seit = Date.now() - new Date(stand.letzteAnfrageAm || 0).getTime();
+  return seit >= ANFRAGE_ABSTAND_MS;
 }
 ```
 
-Zusaetzlich: laeuft gerade eine echte Fix-Session
-(`selbstverbesserung.aktuellerLauf().laeuft`), wird dieser Tick
-uebersprungen, OHNE den Tages-Zaehler zu verbrauchen — der naechste Tick
-(10 Min spaeter) versucht es erneut, solange noch derselbe Tag ist.
+Zusätzlich gilt dieselbe Freigabe wie für die echte Selbstverbesserung:
+`schalterAn('selbstverbesserung')` muss an sein (kein neuer, eigener
+Schalter — beide Mechanismen starten Claude-Code-Sessions und sollen
+zusammen an- und ausgeschaltet werden, siehe Dashboard).
 
 ## 3) Die Session: `starteVorschlagsSession(dateiPfad)`
 
@@ -137,54 +179,67 @@ als die bestehende `starteSession()`, weil hier nichts committet oder
 gepusht wird:
 
 - Nutzt dieselben bestehenden Bausteine: `bereinigteUmgebung()`,
-  `echtAusfuehren()`/`passeBefehlFuerPlattformAn()` (fuer den
-  `claude`-Aufruf unter Windows).
-- **Kein** `git checkout -b` (kein Branch noetig, es wird nie gepusht).
-- **Kein** `npm ci` (die Session soll nichts ausfuehren/testen, nur lesen
-  und schreiben - keine Abhaengigkeiten noetig).
-- **Keine** Tabu-Pfad-Pruefung, **kein** `git diff`-Vorher/Nachher-Vergleich
-  am echten Checkout — beides ist bei der bestehenden Selbstverbesserung
-  dazu da, eine committete/gepushte Aenderung abzusichern. Hier gibt es
-  nie eine committete Aenderung: der komplette Klon wird nach dem Lesen
-  des Ergebnisses geloescht, unabhaengig davon, was die Session darin
-  angestellt hat.
+  `echtAusfuehren()`/`passeBefehlFuerPlattformAn()` (für den
+  `claude`-Aufruf unter Windows), `pruefeWurzel()` als Sicherheitsnetz
+  (bleibt der echte Checkout unverändert, siehe unten).
+- **Kein** `git checkout -b` (kein Branch nötig, es wird nie gepusht).
+- **Kein** `npm ci` (die Session soll nichts ausführen/testen, nur lesen
+  und schreiben — keine Abhängigkeiten nötig).
+- **Keine** Tabu-Pfad-Prüfung, **kein** `git diff`-Vergleich im Klon —
+  beides ist bei der bestehenden Selbstverbesserung dazu da, eine
+  committete/gepushte Änderung abzusichern. Hier gibt es nie eine
+  committete Änderung: der komplette Klon wird nach dem Lesen des
+  Ergebnisses gelöscht, unabhängig davon, was darin geschah.
+- **Vorher/Nachher-Vergleich am echten Checkout bleibt** (`pruefeWurzel()`,
+  wie bei `starteSession()`) — billiges, zusätzliches Sicherheitsnetz,
+  dass die Session wirklich nur im Klon gearbeitet hat.
 - Aufgaben-Text (`baueVorschlagsAufgabe(dateiPfad)`, neu, analog zu
-  `baueAufgabe()`):
+  `baueAufgabe()`) nennt `dateiPfad` als Ausgangspunkt, erlaubt
+  ausdrücklich das Lesen verwandter Dateien für den Kontext:
 
   ```
   # Code-Vorschlag: ${dateiPfad}
 
-  Lies dir `${dateiPfad}` in diesem Projekt an (und alles, was du zum
-  Verstehen brauchst, z.B. verwandte Dateien).
+  Lies dir `${dateiPfad}` in diesem Projekt an - und alles andere im
+  Projekt, was du zum Verstehen brauchst (verwandte Module, Tests,
+  CLAUDE.md). Du darfst frei im Projekt lesen, nicht nur diese eine Datei.
 
   ## Aufgabe
 
-  Schreibe GENAU EINEN konkreten, ehrlichen Verbesserungsvorschlag fuer
-  diese Datei in `CODE_VORSCHLAG.md` im Projekt-Root. Sei konkret (Datei,
-  ungefaehre Stelle, was genau du aendern wuerdest und warum) - kein
-  allgemeines "koennte sauberer sein". Faellt dir nichts Nennenswertes auf,
-  schreibe stattdessen genau `(nichts Nennenswertes)` hinein.
+  Schreibe GENAU EINEN konkreten, ehrlichen Verbesserungsvorschlag in
+  `CODE_VORSCHLAG.md` im Projekt-Root. Sei konkret (Datei, ungefähre
+  Stelle, was genau du ändern würdest und warum) - kein allgemeines
+  "könnte sauberer sein". Fällt dir nichts Nennenswertes auf, schreibe
+  stattdessen genau `(nichts Nennenswertes)` hinein.
 
-  WICHTIG: Aendere KEINE Datei, committe nichts, fuehre keine Tests aus -
-  du sollst nur lesen und EINEN Vorschlag aufschreiben, nichts umsetzen.
+  WICHTIG: Ändere KEINE Datei, committe nichts, führe keine Tests aus - du
+  sollst nur lesen und EINEN Vorschlag aufschreiben, nichts umsetzen.
 
   Halte dich an CLAUDE.md in diesem Projekt (Sprache, "messen nicht
   vermuten").
   ```
 
 - Ergebnis-Datei: `CODE_VORSCHLAG.md` wird nach Sessionende gelesen
-  (gleiches Muster wie `leseZusammenfassungStandard()` fuer
-  `SELBSTVERBESSERUNG_ZUSAMMENFASSUNG.md`), dann wird der **gesamte
-  Klon-Ordner** geloescht (`fs.rm(klonPfad, {recursive:true, force:true})`).
-- Rueckgabe: `{ok:true, vorschlag}` oder `{ok:false, fehler}` (z.B. Timeout,
-  Klon fehlgeschlagen) — wirft nie, wie alle Funktionen in diesem Modul.
+  (gleiches Muster wie `leseZusammenfassungStandard()`), dann wird der
+  **gesamte Klon-Ordner** gelöscht
+  (`fs.rm(klonPfad, {recursive:true, force:true})`).
+- Rückgabe: `{ok:true, vorschlag}` oder `{ok:false, fehler}` (z.B.
+  Timeout, Klon fehlgeschlagen) — wirft nie.
 
-## 4) Zustellung per DM
+## 4) Zwei Arten von DM
 
-Neues, kleines Modul (`code-vorschlag.js`, gleiche Datei wie die Rotation/
-den Tages-Zaehler — die Funktionen gehoeren eng zusammen und sind zu klein
-fuer eine eigene weitere Datei), Muster wie `frage-erinnerung.js`:
+Beide im selben neuen Modul `src/code-vorschlag.js`, Muster wie
+`frage-erinnerung.js`:
 
+**Anfrage-DM** (Gate 1):
+```
+Ich würde mir gerne ${dateiPfad} anschauen und dir vielleicht einen
+Verbesserungsvorschlag machen. Ok?
+
+Antworte mit "ja" oder "nein".
+```
+
+**Vorschlags-DM** (Gate 2, nur nach einem "Ja" auf die Anfrage):
 ```
 ${vorschlag}
 
@@ -194,101 +249,128 @@ Antworte mit "ja" oder "nein" - "ja" heisst nur "gute Idee, merken", ich
 aendere dadurch noch nichts automatisch.
 ```
 
-Der Versand merkt sich einen **ausstehenden Vorschlag** (Datei + Text +
-Zeitpunkt) in derselben `data/code-vorschlaege.json` — analog zu
-`holeGestellte()`/`merkeGestellt()` in `ghostxx-fragen.js`, aber als
-eigener, kleiner State (kein Zusammenspiel mit den offenen operativen
-Fragen dort).
+Beide merken einen **ausstehenden Zustand** (`art: 'anfrage' | 'vorschlag'`,
+Datei, ggf. Vorschlagstext, Zeitpunkt) in `data/code-vorschlaege.json` —
+siehe Abschnitt 6.
 
 ## 5) Kevins Antwort verarbeiten
 
 Neuer Abschnitt in `message-handler.js`, **vor** dem bestehenden
-Frage-Erinnerung-Antwort-Block (Zeile ~651), nach demselben Muster (nur
-DM, nur der Owner):
+Frage-Erinnerung-Antwort-Block, nach demselben Muster (nur DM, nur der
+Owner):
 
 ```js
 if (isDm && text && message.author.id === config.ownerId) {
-  const ausstehenderVorschlag = holeAusstehendenVorschlag(message.author.id);
-  if (ausstehenderVorschlag) {
+  const ausstehend = await holeAusstehend();
+  if (ausstehend) {
     const antwort = text.trim().toLowerCase();
-    if (antwort.startsWith('ja') || antwort.startsWith('nein')) {
-      await vermerkeEntscheidung(ausstehenderVorschlag, antwort.startsWith('ja') ? 'angenommen' : 'abgelehnt');
-      loescheAusstehendenVorschlag(message.author.id);
-      await reply(message, antwort.startsWith('ja') ? 'Gemerkt, danke.' : 'Auch gut, verworfen.');
+    const istJa = antwort.startsWith('ja');
+    const istNein = antwort.startsWith('nein');
+
+    if (!istJa && !istNein) {
+      await reply(message, 'Verstehe nur "ja" oder "nein" dazu.');
       return;
     }
-    await reply(message, 'Verstehe nur "ja" oder "nein" dazu.');
+
+    if (ausstehend.art === 'anfrage') {
+      if (istNein) {
+        await vermerkeAbgelehnteAnfrage();
+        await reply(message, 'Alles klar, dann nicht.');
+        return;
+      }
+      await reply(message, 'Alles klar, ich schau mir das an und melde mich.');
+      // Laeuft im Hintergrund weiter (bis zu 20 Min) - die DM-Antwort
+      // darf darauf nicht warten. Fehler darin werden dort selbst
+      // geloggt, siehe Fehlerbehandlung.
+      starteUndSendeVorschlag(client, ausstehend.datei).catch(() => null);
+      return;
+    }
+
+    // ausstehend.art === 'vorschlag'
+    await vermerkeEntscheidung(istJa ? 'angenommen' : 'abgelehnt');
+    await reply(message, istJa ? 'Gemerkt, danke.' : 'Auch gut, verworfen.');
     return;
   }
 }
 ```
 
 Reihenfolge bewusst: **vor** dem bestehenden Frage-Erinnerung-Block. Beide
-Zustaende sind selten (je hoechstens 1/Tag) und ueberschneiden sich in der
-Praxis kaum — bei einem theoretischen Zusammentreffen gewinnt der
-Vorschlag, das ist eine bewusste, einfache Festlegung, keine echte Sorge.
+Zustände sind selten und überschneiden sich in der Praxis kaum — bei einem
+theoretischen Zusammentreffen gewinnt der Code-Vorschlag, das ist eine
+bewusste, einfache Festlegung, keine echte Sorge.
 
-## 6) Protokoll vergangener Vorschläge
+## 6) Protokoll und Zustand
 
 `data/code-vorschlaege.json`:
 
 ```json
 {
-  "rotation": { "zuletztDatei": "src/xyz.js" },
-  "tagesZaehler": { "datum": "2026-09-29", "gelaufenAm": "2026-09-29T09:00:00.000Z" },
-  "ausstehend": { "datei": "src/xyz.js", "vorschlag": "...", "gesendetAm": "..." },
+  "rotation": { "zuletztVorgeschlagen": "src/xyz.js" },
+  "letzteAnfrageAm": "2026-09-29T09:00:00.000Z",
+  "ausstehend": {
+    "art": "anfrage",
+    "datei": "src/xyz.js",
+    "vorschlag": null,
+    "gesendetAm": "2026-09-29T09:00:00.000Z"
+  },
   "verlauf": [
     { "datei": "src/abc.js", "vorschlag": "...", "status": "angenommen", "entschiedenAm": "..." }
   ]
 }
 ```
 
-`verlauf` wird wie die bestehenden Verlaufsdateien gekappt (z.B. 100
-Eintraege) — reine Historie, kein Bestandteil der Erkennungslogik.
+`ausstehend` ist `null`, wenn nichts offen ist. `verlauf` wird wie die
+bestehenden Verlaufsdateien gekappt (z.B. 100 Einträge) — reine Historie,
+kein Bestandteil der Ablauflogik. Eine abgelehnte **Anfrage** (Gate 1)
+landet nicht im `verlauf` — dort stehen nur echte, tatsächlich gemachte
+Vorschläge samt Entscheidung.
 
 ## Fehlerbehandlung
 
 - Jeder Schritt (Rotation, Session, DM-Versand) wirft nie nach außen —
   schlägt einer fehl (z.B. `claude`-Aufruf schlägt fehl, DM kann nicht
-  gesendet werden, weil Kevin keine DMs von Servermitgliedern erlaubt),
-  wird geloggt (`logError`), der Tages-Zähler wird **nicht** verbraucht
-  (damit der nächste Tick es nochmal versucht), und der Scheduler läuft
-  unverändert weiter.
-- Schlägt die Session fehl, gibt es keinen Vorschlag, also auch keine DM —
-  kein Fehlertext an Kevin nötig, das wäre nur Rauschen für ein Feature,
-  das ohnehin nicht kritisch ist.
-- Bleibt eine DM unbeantwortet (Kevin antwortet nie), bleibt der Eintrag
-  in `ausstehend` stehen. Das blockiert **nicht** den nächsten Tag —
-  `darfHeuteLaufen()` prüft nur das Datum, nicht ob die letzte Antwort da
-  ist. Am nächsten Tag würde also ein neuer Vorschlag gesendet, während
-  der alte noch unbeantwortet in `ausstehend` liegt und überschrieben
-  wird. Für Version 1 akzeptiert (siehe Nicht-Ziele) — kein Stau von
-  mehreren offenen Vorschlägen gleichzeitig.
+  gesendet werden), wird geloggt (`logError`), `ausstehend` wird wieder auf
+  `null` gesetzt (damit das Feature nicht dauerhaft blockiert bleibt), und
+  `letzteAnfrageAm` bleibt stehen (die Mindestpause gilt weiter ab dem
+  Zeitpunkt der ursprünglichen Anfrage).
+- Schlägt die Session nach einem "Ja" auf die Anfrage fehl, bekommt Kevin
+  eine kurze DM darüber ("Hat leider nicht geklappt: ...") — anders als
+  bei der Anfrage selbst hat er hier schon "Ja" gesagt und wartet auf eine
+  Antwort, ein stilles Verschwinden wäre verwirrend.
+- Bleibt eine DM unbeantwortet, bleibt `ausstehend` stehen — es kommt
+  keine neue Anfrage, bis Kevin reagiert (siehe Abschnitt 2, Bedingung 1).
+  Kein Stau von mehreren offenen Vorgängen gleichzeitig, aber auch kein
+  automatisches Aufgeben — das ist für Version 1 bewusst so (Kevin
+  antwortet, wenn er Zeit hat).
 
 ## Tests
 
 - `naechsteDatei()`: rotiert korrekt durch eine (in Tests gemockte) Liste
-  von Dateinamen, springt am Ende wieder zum Anfang, faengt bei einer
-  nicht mehr existierenden zuletzt-Datei wieder von vorne an.
-- `darfHeuteLaufen()`: `true` am ersten Aufruf eines Tages, `false` nach
-  einem vermerkten Lauf am selben Tag, wieder `true` am naechsten Tag.
+  von Dateinamen, springt am Ende wieder zum Anfang, fängt bei einer nicht
+  mehr existierenden zuletzt-vorgeschlagenen Datei wieder von vorne an.
+- `darfFragen()`: `false` wenn `ausstehend` gesetzt ist (unabhängig von der
+  Mindestpause), `false` innerhalb der Mindestpause nach der letzten
+  Anfrage, `true` danach.
 - `starteVorschlagsSession()`: mit injiziertem `ausfuehren()` (wie bei den
-  bestehenden `starteSession()`-Tests) - liest `CODE_VORSCHLAG.md`
-  korrekt, loescht den Klon-Ordner danach, liefert `{ok:false}` bei einem
+  bestehenden `starteSession()`-Tests) — liest `CODE_VORSCHLAG.md`
+  korrekt, löscht den Klon-Ordner danach, liefert `{ok:false}` bei einem
   fehlgeschlagenen Klon, ohne zu werfen.
-- DM-Antwort-Verarbeitung: "ja"/"Ja"/"JA " wird als angenommen erkannt,
-  "nein" als abgelehnt, alles andere fuehrt zu einer Rueckfrage statt
-  einer stillen Fehlinterpretation.
+- DM-Antwort-Verarbeitung: "ja"/"Ja"/"JA " wird als Zustimmung erkannt,
+  "nein" als Ablehnung, alles andere führt zu einer Rückfrage statt einer
+  stillen Fehlinterpretation — für **beide** `ausstehend.art`-Werte
+  getrennt geprüft (Anfrage-Ja startet die Session, Vorschlags-Ja
+  vermerkt nur).
 
 ## Offene Punkte für die Umsetzungsplanung
 
-- Exakter Name/Ort der neuen Module (`code-vorschlag.js` als Vorschlag,
-  kein Muss) und ob Rotation/Tages-Zaehler/DM-Versand in einer oder
-  mehreren Dateien landen.
-- Ob `starteVorschlagsSession()` in `selbstverbesserung-session.js` landet
-  (Wiederverwendung der Klon-Hilfsfunktionen) oder ob diese Hilfsfunktionen
-  zuerst in ein gemeinsames, kleines Hilfsmodul extrahiert werden — Detail
-  fuer die Implementierung, nicht fuer dieses Design.
+- Exakter Wert für `ANFRAGE_ABSTAND_MS` (3 Stunden ist ein Vorschlag, kein
+  Muss — Kevin hat ausdrücklich "keine Vorgabe wann" gesagt, die Bremse
+  ist eine technische Notwendigkeit gegen DM-Spam, kein inhaltliches
+  Limit).
+- Exakter Name/Ort der neuen Module (`code-vorschlag.js` als Vorschlag)
+  und ob `starteVorschlagsSession()` in `selbstverbesserung-session.js`
+  landet (Wiederverwendung der Klon-Hilfsfunktionen) — Detail für die
+  Implementierung.
 - Genauer Scheduler-Anschluss (eigener `setInterval` wie
-  `frage-erinnerung.js`, oder Teil des bestehenden 10-Minuten-Takts in
-  `index.js`) — funktional gleichwertig, reine Verdrahtungsfrage.
+  `frage-erinnerung.js`, oder Teil eines bestehenden Takts) — reine
+  Verdrahtungsfrage.
