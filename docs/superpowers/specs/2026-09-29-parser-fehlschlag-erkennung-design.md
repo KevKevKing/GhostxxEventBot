@@ -95,10 +95,14 @@ eigenen Verlauf an (eigene Datei `selbstbeobachtung-fallback.json`,
 Eintrag, eigene Aufbewahrung, soll die bestehende Fehler-Erkennung nicht
 durch eine andere Eintragsform verwaessern). Gleiche Aufbewahrungslogik wie
 heute: 24h Aufbewahrung, max. 300 Eintraege, atomar geschrieben
-(`writeFileAtomic`), einmalig geladen und danach im Speicher gehalten — der
-bestehende `bereinigt()`/`ladeVerlauf()`/`speichereVerlauf()`-Code in
-`selbstbeobachtung.js` wird dafuer wiederverwendet (parametrisiert auf
-Dateiname statt fest verdrahtet), nicht dupliziert.
+(`writeFileAtomic`), einmalig geladen und danach im Speicher gehalten —
+`bereinigt()` (Kappung auf 24h/300 Eintraege) wird von beiden Verlaeufen
+gemeinsam genutzt, `ladeVerlauf()`/`speichereVerlauf()` selbst aber bewusst
+als eigene, fast identische Funktionsgruppe (`ladeFallbackVerlauf()`/
+`speichereFallbackVerlauf()`) dupliziert statt parametrisiert: die
+Fehler-/Absturz-Erkennung ist bereits real im Einsatz getestet, ein
+gemeinsamer Code-Pfad haette jede Aenderung hier zum Risiko fuer sie
+gemacht.
 
 **Fehlerbehandlung:** `.catch(() => null)` beim Aufruf aus
 `message-handler.js` — das Vermerken darf dem eigentlichen Chat-Fluss
@@ -177,6 +181,17 @@ dort automatisch genauso wie ein Fehler-Fund.
   heute bei den anderen beiden Quellen auch nicht) — ein Fehler hier wuerde
   denselben Weg wie jeder andere Fehler in der Kette nehmen (Log, kein
   Absturz des Bots, siehe bestehende Fehlerbehandlung in `tick()`).
+- **Erneutes Ausloesen trotz bereits entschiedenem Fund:** `istBekannt()`
+  verhindert nur, dass derselbe Fund ein zweites Mal *gemeldet* wird — die
+  zugrundeliegenden Eintraege im Fallback-Verlauf zaehlen unabhaengig davon
+  bis zu 24 Stunden weiter (ihre Aufbewahrungsdauer). Kommt nach Kevins
+  Entscheidung (angenommen oder ignoriert) innerhalb dieser 24 Stunden ein
+  weiterer Fallback fuer dieselbe Aktion dazu, kann daraus ein neuer Fund mit
+  neuer Signatur entstehen und eine weitere automatische Session anstossen —
+  begrenzt nur durch das bestehende Tageslimit von 5 Sessions. Das ist kein
+  neues Risiko (`erkenneProblem()` hat dieselbe Eigenschaft), aber hier
+  wahrscheinlicher relevant, weil das Signal fortlaufend auftritt statt wie
+  ein echter Fehler eher gelegentlich.
 
 ## Tests
 
@@ -199,7 +214,7 @@ dort automatisch genauso wie ein Fehler-Fund.
 
 - Genauer Dateiname/Pfad fuer den neuen Verlauf
   (`selbstbeobachtung-fallback.json` ist ein Vorschlag, kein Muss).
-- Ob `bereinigt()`/`ladeVerlauf()`/`speichereVerlauf()` in
-  `selbstbeobachtung.js` fuer zwei Verlaeufe parametrisiert werden (eine
-  Instanz pro Datei) oder ob eine zweite, fast identische Funktionsgruppe
-  entsteht — Details fuer die Implementierung, nicht fuer dieses Design.
+- **Entschieden:** `ladeVerlauf()`/`speichereVerlauf()` wurden nicht
+  parametrisiert, sondern als eigene Funktionsgruppe dupliziert
+  (`ladeFallbackVerlauf()`/`speichereFallbackVerlauf()`) — Begruendung siehe
+  Abschnitt 1 oben.

@@ -182,10 +182,21 @@ async function speichereFallbackVerlauf() {
  * Modell stattdessen eine Absicht geliefert hat (siehe message-handler.js,
  * Stelle "Absicht vom Modell"). Der Aufrufer haengt selbst ein .catch() an -
  * das Vermerken darf den Chat-Fluss nie aufhalten oder abbrechen lassen.
+ *
+ * `grund` ist hier bewusst mit dabei, obwohl er bei jedem Eintrag gleich
+ * aussieht (kein Zugriff auf den urspruenglichen Nachrichtentext - das waere
+ * eine eigene, groessere Abwaegung zur Privatsphaere): ohne `grund` wuerde
+ * die automatisch gestartete Session (`selbstverbesserung-session.js`) beim
+ * Rendern der Belege ein nacktes "undefined" ausgeben, siehe dort
+ * `belegeText`.
  */
 async function vermerkeModellFallback(aktion) {
   const liste = await ladeFallbackVerlauf();
-  liste.push({ aktion, zeit: new Date().toISOString() });
+  liste.push({
+    aktion,
+    grund: `Modell musste fuer den Parser einspringen (Aktion "${aktion}")`,
+    zeit: new Date().toISOString(),
+  });
   await speichereFallbackVerlauf();
 }
 
