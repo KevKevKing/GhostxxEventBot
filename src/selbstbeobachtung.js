@@ -141,8 +141,81 @@ async function crashSchleifeErkannt() {
   return { titel: 'Wiederholte Abstuerze', belege: crashes };
 }
 
+// Zweiter, eigener Verlauf fuer Parser-Fehlschlaege - bewusst getrennt vom
+// Fehler-Verlauf oben. Andere Art von Eintrag (kein echter Fehler, sondern
+// ein Fall, in dem das Modell fuer den festen Parser einspringen musste),
+// eigene Aufbewahrung. Absichtlich als eigene, kleine Funktionsgruppe
+// dupliziert statt die obigen Funktionen zu parametrisieren: die
+// Fehler-/Absturz-Erkennung oben ist bereits real im Einsatz getestet, ein
+// gemeinsamer Code-Pfad haette jede Aenderung hier zum Risiko fuer sie
+// gemacht.
+const fallbackDatei = path.join(config.dataDir, 'selbstbeobachtung-fallback.json');
+let fallbackVerlauf = null;
+let fallbackLadenPromise = null;
+
+async function ladeFallbackVerlauf() {
+  if (fallbackVerlauf) return fallbackVerlauf;
+  if (!fallbackLadenPromise) {
+    fallbackLadenPromise = (async () => {
+      let geladen;
+      try {
+        const roh = JSON.parse(await fs.readFile(fallbackDatei, 'utf8'));
+        geladen = Array.isArray(roh.eintraege) ? roh.eintraege : [];
+      } catch {
+        geladen = [];
+      }
+      fallbackVerlauf = bereinigt(geladen);
+      return fallbackVerlauf;
+    })();
+  }
+  return fallbackLadenPromise;
+}
+
+async function speichereFallbackVerlauf() {
+  fallbackVerlauf = bereinigt(fallbackVerlauf);
+  await fs.mkdir(config.dataDir, { recursive: true });
+  await writeFileAtomic(fallbackDatei, JSON.stringify({ eintraege: fallbackVerlauf }, null, 2));
+}
+
+/**
+ * Vermerkt, dass der feste Parser eine Nachricht nicht erkannt hat und das
+ * Modell stattdessen eine Absicht geliefert hat (siehe message-handler.js,
+ * Stelle "Absicht vom Modell"). Der Aufrufer haengt selbst ein .catch() an -
+ * das Vermerken darf den Chat-Fluss nie aufhalten oder abbrechen lassen.
+ */
+async function vermerkeModellFallback(aktion) {
+  const liste = await ladeFallbackVerlauf();
+  liste.push({ aktion, zeit: new Date().toISOString() });
+  await speichereFallbackVerlauf();
+}
+
+async function parserFehlschlagErkannt() {
+  const eintraege = await ladeFallbackVerlauf();
+  const grenze = Date.now() - FENSTER_MS;
+  const aktuelle = eintraege.filter((e) => new Date(e.zeit).getTime() >= grenze);
+
+  const proAktion = new Map();
+  for (const eintrag of aktuelle) {
+    const liste = proAktion.get(eintrag.aktion) || [];
+    liste.push(eintrag);
+    proAktion.set(eintrag.aktion, liste);
+  }
+
+  let bester = null;
+  for (const [aktion, belege] of proAktion) {
+    if (belege.length < SCHWELLE) continue;
+    const titel = `Parser erkennt "${aktion}" wiederholt nicht`;
+    if (await istBekannt(signatur(titel))) continue;
+    if (!bester || belege.length > bester.belege.length) bester = { titel, belege };
+  }
+
+  return bester;
+}
+
 module.exports = {
   crashSchleifeErkannt,
   erkenneProblem,
+  parserFehlschlagErkannt,
   registriereBeobachtung,
+  vermerkeModellFallback,
 };

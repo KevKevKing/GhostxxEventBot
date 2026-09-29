@@ -109,6 +109,26 @@ beobachtung.registriereBeobachtung();
     `tatsaechlich ${geschrieben.eintraege.length}`,
   );
 
+  section('Parser-Fehlschlaege: kein Problem ohne Wiederholung');
+  await beobachtung.vermerkeModellFallback('swap');
+  check('Einzelner Fallback ergibt kein Problem', (await beobachtung.parserFehlschlagErkannt()) === null);
+
+  section('Parser-Fehlschlaege: drei gleiche Aktionen ergeben ein Problem');
+  await beobachtung.vermerkeModellFallback('swap');
+  await beobachtung.vermerkeModellFallback('swap');
+  const parserProblem = await beobachtung.parserFehlschlagErkannt();
+  check('Problem erkannt', parserProblem?.titel === 'Parser erkennt "swap" wiederholt nicht');
+  check('Belege gesammelt', parserProblem?.belege?.length >= 3);
+
+  section('Parser-Fehlschlaege: bereits bekanntes Problem wird nicht erneut gemeldet');
+  await gedaechtnis.neuerEintrag({ titel: parserProblem.titel, belege: parserProblem.belege });
+  check('Kein erneuter Fund', (await beobachtung.parserFehlschlagErkannt()) === null);
+
+  section('Parser-Fehlschlaege: andere Aktionen zaehlen getrennt und brauchen eigene Wiederholung');
+  await beobachtung.vermerkeModellFallback('add');
+  await beobachtung.vermerkeModellFallback('add');
+  check('Zwei "add"-Fallbacks reichen noch nicht', (await beobachtung.parserFehlschlagErkannt()) === null);
+
   temp.cleanup();
   finish();
 })();
