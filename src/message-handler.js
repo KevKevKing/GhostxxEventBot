@@ -18,6 +18,7 @@ const {
   prepareIntent,
 } = require('./chat-router');
 const { looksLikeCommand } = require('./intent-parser');
+const { vermerkeModellFallback } = require('./selbstbeobachtung');
 const { parseStatsFrage } = require('./stats-parser');
 const { beantworteStatsFrage } = require('./stats-answer');
 const { buildServerContext } = require('./server-wissen');
@@ -859,6 +860,7 @@ async function handleMessage(message, client) {
 
   if (result.intent) {
     console.log(`Absicht vom Modell (${result.model}): ${JSON.stringify(result.intent)}`);
+    await vermerkeModellFallback(result.intent.action).catch(() => null);
     await runIntent(message, client, result.intent, context);
     return;
   }
