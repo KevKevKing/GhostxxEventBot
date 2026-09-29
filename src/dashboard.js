@@ -7,6 +7,8 @@ const { setzePause } = require('./bild-vorablesen');
 const { istAn, setzeSchalter } = require('./steuerung');
 const { chat } = require('./ollama');
 const { writeFileAtomic } = require('./atomic-write');
+const { getEvent, updateEvent } = require('./storage');
+const { refreshEventMessage } = require('./event-message');
 
 // Wo der Watchdog (run-bot.ps1) nachsieht, ob er nach dem Beenden neu
 // starten soll. Ein PowerShell-Skript, kein Node-Modul - deshalb reines JSON,
@@ -77,6 +79,34 @@ function startDashboard(client) {
         }
         res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
         res.end(JSON.stringify({ ok: true, schalter }));
+        return;
+      }
+
+      // Fuenfter schreibender Weg: eine einzelne offene Anmeldung absagen -
+      // dieselbe Logik wie /event absagen (Status wird 'cancelled', nichts
+      // wird aus events.json geloescht), nur ohne Discord-Command erreichbar.
+      // Fuer genau den Fall gedacht, in dem der zugehoerige Discord-Kanal
+      // schon manuell geloescht wurde: refreshEventMessage findet dann
+      // einfach keinen Kanal/keine Nachricht mehr und tut nichts, kein Fehler.
+      if (req.url === '/api/anmeldung-absagen' && req.method === 'POST') {
+        const roh = await new Promise((fertig) => {
+          let daten = '';
+          req.on('data', (stueck) => { daten += stueck; if (daten.length > 500) req.destroy(); });
+          req.on('end', () => fertig(daten));
+        });
+        const { eventId } = JSON.parse(roh || '{}');
+        const event = await getEvent(String(eventId || ''));
+        if (!event) {
+          res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' });
+          res.end(JSON.stringify({ ok: false }));
+          return;
+        }
+        const aktualisiert = await updateEvent(event.id, (e) => (
+          { ...e, status: 'cancelled', cancelReason: 'Ueber Dashboard entfernt' }
+        ));
+        await refreshEventMessage(client, aktualisiert).catch(() => null);
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+        res.end(JSON.stringify({ ok: true }));
         return;
       }
 

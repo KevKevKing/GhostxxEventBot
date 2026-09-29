@@ -158,6 +158,13 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
   check('ruft den eigenen Weg auf, nicht /api/antwort', html.includes('/api/bilder-pause'));
   check('Knopf-Text sagt, was ein Klick als naechstes tut', html.includes('Bildlesen pausieren') && html.includes('Bildlesen fortsetzen'));
 
+  section('Anmeldung im Dashboard absagen');
+  // Kevins Wunsch (29.09.): eine laengst in Discord geloeschte Anmeldung soll
+  // sich aus dem Dashboard entfernen lassen, ohne den Discord-Command zu
+  // brauchen - derselbe Absagen-Weg wie /event absagen, nur von hier aus.
+  check('Knopf pro Zeile', html.includes('absagen-knopf'));
+  check('ruft den eigenen Weg auf', html.includes('/api/anmeldung-absagen'));
+
   section('"Er fragt"-Kachel ist raus (ersetzt durch DM, siehe frage-erinnerung.js)');
   check('kein /api/antwort mehr in der Seite', !html.includes('/api/antwort'));
   check('keine Fragen-Kachel mehr', !html.includes('karte-fragen'));
@@ -242,6 +249,30 @@ const stiller = { guilds: { cache: new Map(), fetch: async () => null } };
 
   section('Offene Fragen kommen nicht mehr ueber das Dashboard (siehe frage-erinnerung.js)');
   check('kein fragen-Feld mehr in stand()', !('fragen' in stand2));
+
+  section('Anmeldung absagen entfernt sie aus der offenen Liste');
+  // Genau die Umstellung, die /api/anmeldung-absagen im Dashboard macht -
+  // ohne den HTTP-Server selbst zu starten, wie auch der Rest dieser Datei
+  // nur die Logik dahinter prueft.
+  const { createEventId, saveEvent, updateEvent } = require('../src/storage');
+  const { offeneAnmeldungen } = require('../src/dashboard-daten');
+  const altesEvent = {
+    id: createEventId(),
+    title: 'Steinzeit-Anmeldung',
+    kind: undefined,
+    createdBy: 'jemand',
+    status: 'open',
+    attendees: [],
+    substitutes: [],
+    createdAt: new Date().toISOString(),
+    channelId: 'geloeschter-kanal',
+    messageId: 'geloeschte-nachricht',
+  };
+  await saveEvent(altesEvent);
+  check('vorher offen sichtbar', (await offeneAnmeldungen()).some((a) => a.id === altesEvent.id));
+
+  await updateEvent(altesEvent.id, (e) => ({ ...e, status: 'cancelled', cancelReason: 'Ueber Dashboard entfernt' }));
+  check('danach aus der offenen Liste weg', !(await offeneAnmeldungen()).some((a) => a.id === altesEvent.id));
 
   temp.cleanup();
   finish();

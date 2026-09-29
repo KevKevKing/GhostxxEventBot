@@ -539,6 +539,8 @@ function zeichneAnmeldungen(liste) {
       + '<td class="zahl">' + a.dabei + '/' + (a.max || '?')
         + (a.ersatz ? ' <span class="leise">+' + a.ersatz + '</span>' : '') + '</td>'
       + '<td class="zahl leise">' + schliesst + '</td>'
+      + '<td><button class="absagen-knopf" data-id="' + sicher(a.id) + '" '
+        + 'title="Diese Anmeldung absagen">✕</button></td>'
       + '</tr>';
   }).join('') + '</table>';
 }
@@ -1054,6 +1056,22 @@ $('ruhe').addEventListener('click', aufwachen);
 // Und der Kern im Dashboard schickt ihn wieder schlafen. Nirgends
 // angeschrieben ausser einem leisen Hinweis beim Draufzeigen.
 $('ring').addEventListener('click', schlafen);
+
+// Anmeldungen absagen: ein Klick, egal wie viele Zeilen zeichneAnmeldungen()
+// gerade gebaut hat - einmalig auf dem Container gebunden statt bei jedem
+// laden() neu, weil innerHTML sonst pro Zeile einen eigenen Listener wollte.
+$('anmeldungen').addEventListener('click', async (e) => {
+  const knopf = e.target.closest('.absagen-knopf');
+  if (!knopf) return;
+  if (!confirm('Diese Anmeldung wirklich absagen? Verschwindet dann aus dieser Liste.')) return;
+  knopf.disabled = true;
+  await fetch('/api/anmeldung-absagen', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ eventId: knopf.dataset.id }),
+  }).catch(() => null);
+  laden();
+});
 
 // Terminal-Overlay schliessen: per Knopf, per Klick daneben, per Escape.
 // Statisches HTML, deshalb einmalig binden statt bei jedem laden().
