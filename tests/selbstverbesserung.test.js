@@ -9,6 +9,7 @@ section('Schalter aus -> komplett untaetig');
     beobachten: {
       erkenneProblem: async () => { aufrufeAus.push('erkenneProblem'); return { titel: 'X', belege: [] }; },
       crashSchleifeErkannt: async () => { aufrufeAus.push('crashSchleifeErkannt'); return null; },
+      parserFehlschlagErkannt: async () => null,
     },
     limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => aufrufeAus.push('vermerkeLauf') },
     session: { starteSession: async () => { aufrufeAus.push('starteSession'); return { ok: true }; } },
@@ -25,7 +26,7 @@ section('Schalter aus -> komplett untaetig');
   const aufrufe = [];
   await tick({
     schalterAn: () => true,
-    beobachten: { erkenneProblem: async () => null, crashSchleifeErkannt: async () => null },
+    beobachten: { erkenneProblem: async () => null, crashSchleifeErkannt: async () => null, parserFehlschlagErkannt: async () => null },
     limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => aufrufe.push('vermerkeLauf') },
     session: { starteSession: async () => { aufrufe.push('starteSession'); return { ok: true, branch: 'x', zusammenfassung: 'y' }; } },
     benachrichtigung: { benachrichtige: async () => aufrufe.push('benachrichtige'), sendeAusstehende: async () => 0 },
@@ -37,7 +38,7 @@ section('Schalter aus -> komplett untaetig');
   const aufrufe2 = [];
   await tick({
     schalterAn: () => true,
-    beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null },
+    beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null, parserFehlschlagErkannt: async () => null },
     limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => aufrufe2.push('vermerkeLauf') },
     session: { starteSession: async (problem) => { aufrufe2.push(`starteSession:${problem.titel}`); return { ok: true, branch: 'b', zusammenfassung: 'z' }; } },
     benachrichtigung: { benachrichtige: async () => aufrufe2.push('benachrichtige'), sendeAusstehende: async () => 0 },
@@ -53,7 +54,7 @@ section('Schalter aus -> komplett untaetig');
   const aufrufe3 = [];
   await tick({
     schalterAn: () => true,
-    beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null },
+    beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null, parserFehlschlagErkannt: async () => null },
     limit: { darfLaufen: async () => ({ erlaubt: false, grund: 'tageslimit' }), vermerkeLauf: async () => aufrufe3.push('vermerkeLauf') },
     session: { starteSession: async () => { aufrufe3.push('starteSession'); return { ok: true }; } },
     benachrichtigung: { benachrichtige: async () => aufrufe3.push('benachrichtige'), sendeAusstehende: async () => 0 },
@@ -68,7 +69,7 @@ section('Schalter aus -> komplett untaetig');
   let gemeldet = null;
   await tick({
     schalterAn: () => true,
-    beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null },
+    beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null, parserFehlschlagErkannt: async () => null },
     limit: { darfLaufen: async () => ({ erlaubt: false, grund: 'tageslimit' }), vermerkeLauf: async () => {} },
     session: { starteSession: async () => ({ ok: true }) },
     benachrichtigung: { benachrichtige: async (e) => { gemeldet = e; }, sendeAusstehende: async () => 0 },
@@ -83,7 +84,7 @@ section('Schalter aus -> komplett untaetig');
   try {
     await tick({
       schalterAn: () => true,
-    beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null },
+    beobachten: { erkenneProblem: async () => ({ titel: 'X', belege: [] }), crashSchleifeErkannt: async () => null, parserFehlschlagErkannt: async () => null },
       limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => aufrufe4.push('vermerkeLauf') },
       session: { starteSession: async () => { throw new Error('kaputt'); } },
       benachrichtigung: { benachrichtige: async () => aufrufe4.push('benachrichtige'), sendeAusstehende: async () => 0 },
@@ -110,7 +111,7 @@ section('Schalter aus -> komplett untaetig');
   let waehrendDerSession = null;
   await tick({
     schalterAn: () => true,
-    beobachten: { erkenneProblem: async () => ({ titel: 'Laufendes Problem', belege: [] }), crashSchleifeErkannt: async () => null },
+    beobachten: { erkenneProblem: async () => ({ titel: 'Laufendes Problem', belege: [] }), crashSchleifeErkannt: async () => null, parserFehlschlagErkannt: async () => null },
     limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => {} },
     session: {
       starteSession: async () => {
@@ -128,13 +129,30 @@ section('Schalter aus -> komplett untaetig');
   // Eine geworfene Session darf die Anzeige nicht haengen lassen.
   await tick({
     schalterAn: () => true,
-    beobachten: { erkenneProblem: async () => ({ titel: 'Kaputtes Problem', belege: [] }), crashSchleifeErkannt: async () => null },
+    beobachten: { erkenneProblem: async () => ({ titel: 'Kaputtes Problem', belege: [] }), crashSchleifeErkannt: async () => null, parserFehlschlagErkannt: async () => null },
     limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => {} },
     session: { starteSession: async () => { throw new Error('kaputt'); } },
     benachrichtigung: { benachrichtige: async () => {}, sendeAusstehende: async () => 0 },
     gedaechtnis: { neuerEintrag: async () => ({ id: '6' }), vermerkeSession: async () => {}, vermerkeEntscheidung: async () => {} },
   });
   check('Auch nach einem Fehler wieder aus', aktuellerLauf().laeuft === false);
+
+  section('Kein Fehler/Absturz, aber Parser-Fund -> volle Kette laeuft trotzdem');
+  const aufrufe5 = [];
+  await tick({
+    schalterAn: () => true,
+    beobachten: {
+      erkenneProblem: async () => null,
+      crashSchleifeErkannt: async () => null,
+      parserFehlschlagErkannt: async () => ({ titel: 'Parser erkennt "swap" wiederholt nicht', belege: [] }),
+    },
+    limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => aufrufe5.push('vermerkeLauf') },
+    session: { starteSession: async (problem) => { aufrufe5.push(`starteSession:${problem.titel}`); return { ok: true, branch: 'b', zusammenfassung: 'z' }; } },
+    benachrichtigung: { benachrichtige: async () => aufrufe5.push('benachrichtige'), sendeAusstehende: async () => 0 },
+    gedaechtnis: { neuerEintrag: async () => { aufrufe5.push('neuerEintrag'); return { id: '77' }; }, vermerkeSession: async (id) => aufrufe5.push(`vermerkeSession:${id}`) },
+  });
+  check('Dritte Quelle wird abgefragt und ausgeloest', aufrufe5.includes('starteSession:Parser erkennt "swap" wiederholt nicht'));
+  check('Laeuft durch dieselbe Kette wie die anderen beiden Quellen', aufrufe5.includes('neuerEintrag') && aufrufe5.includes('benachrichtige'));
 
   finish();
 })();

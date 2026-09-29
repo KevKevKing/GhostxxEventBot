@@ -109,6 +109,50 @@ beobachtung.registriereBeobachtung();
     `tatsaechlich ${geschrieben.eintraege.length}`,
   );
 
+  section('Parser-Fehlschlaege: Eintraege ausserhalb des 2h-Fensters zaehlen nicht');
+  // ladeFallbackVerlauf() haelt die Historie nach dem ersten Laden im
+  // Speicher (gleiches Muster wie bei ladeVerlauf() oben) - dieser Test muss
+  // deshalb VOR dem ersten Aufruf von vermerkeModellFallback()/
+  // parserFehlschlagErkannt() in dieser Datei laufen, sonst wuerde die direkt
+  // in die Datei geschriebene Fabrikation vom bereits geladenen
+  // Speicher-Stand ueberdeckt und nie gelesen. Anders als beim
+  // Crash-Log-Test braucht es hier keine lokale-Zeit-Umrechnung: die
+  // Fallback-Datei speichert `zeit` direkt als ISO-String.
+  const fallbackDatei = path.join(config.dataDir, 'selbstbeobachtung-fallback.json');
+  const vorDemFenster = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+  fs.mkdirSync(path.dirname(fallbackDatei), { recursive: true });
+  fs.writeFileSync(fallbackDatei, JSON.stringify({
+    eintraege: [
+      { aktion: 'alt', grund: 'Test', zeit: vorDemFenster },
+      { aktion: 'alt', grund: 'Test', zeit: vorDemFenster },
+      { aktion: 'alt', grund: 'Test', zeit: vorDemFenster },
+    ],
+  }, null, 2), 'utf8');
+  check(
+    'Eintraege aelter als 2h ergeben kein Problem',
+    (await beobachtung.parserFehlschlagErkannt()) === null,
+  );
+
+  section('Parser-Fehlschlaege: kein Problem ohne Wiederholung');
+  await beobachtung.vermerkeModellFallback('swap');
+  check('Einzelner Fallback ergibt kein Problem', (await beobachtung.parserFehlschlagErkannt()) === null);
+
+  section('Parser-Fehlschlaege: drei gleiche Aktionen ergeben ein Problem');
+  await beobachtung.vermerkeModellFallback('swap');
+  await beobachtung.vermerkeModellFallback('swap');
+  const parserProblem = await beobachtung.parserFehlschlagErkannt();
+  check('Problem erkannt', parserProblem?.titel === 'Parser erkennt "swap" wiederholt nicht');
+  check('Belege gesammelt', parserProblem?.belege?.length >= 3);
+
+  section('Parser-Fehlschlaege: bereits bekanntes Problem wird nicht erneut gemeldet');
+  await gedaechtnis.neuerEintrag({ titel: parserProblem.titel, belege: parserProblem.belege });
+  check('Kein erneuter Fund', (await beobachtung.parserFehlschlagErkannt()) === null);
+
+  section('Parser-Fehlschlaege: andere Aktionen zaehlen getrennt und brauchen eigene Wiederholung');
+  await beobachtung.vermerkeModellFallback('add');
+  await beobachtung.vermerkeModellFallback('add');
+  check('Zwei "add"-Fallbacks reichen noch nicht', (await beobachtung.parserFehlschlagErkannt()) === null);
+
   temp.cleanup();
   finish();
 })();
