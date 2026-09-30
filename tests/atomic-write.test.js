@@ -70,6 +70,37 @@ const ziel = path.join(temp.dir, 'daten.json');
   check('sofort aufgegeben', Date.now() - start < 100, `${Date.now() - start}ms`);
   fsp.rename = echtesRename;
 
+  section('Zwei gleichzeitige Aufrufe fuer denselben Pfad schreiben nacheinander, nicht gegeneinander');
+  // Ghosts eigener Code-Vorschlag (30.09.): vorher haengte der Name der
+  // .tmp-Datei nur vom Zielpfad ab - zwei gleichzeitige Aufrufe teilten sich
+  // dieselbe .tmp, und wer zuerst umbenannte, liess den anderen mit ENOENT
+  // scheitern. Verzoegertes fs.writeFile simuliert echte Ueberlappung.
+  const echtesWriteFile = fsp.writeFile;
+  let aktiveSchreibvorgaenge = 0;
+  let maxGleichzeitig = 0;
+  fsp.writeFile = async (ziel2, inhalt) => {
+    aktiveSchreibvorgaenge += 1;
+    maxGleichzeitig = Math.max(maxGleichzeitig, aktiveSchreibvorgaenge);
+    await new Promise((resolve) => { setTimeout(resolve, 20); });
+    aktiveSchreibvorgaenge -= 1;
+    return echtesWriteFile(ziel2, inhalt);
+  };
+
+  const gleichzeitigerPfad = path.join(temp.dir, 'gleichzeitig.json');
+  const [ergebnisA, ergebnisB] = await Promise.allSettled([
+    writeFileAtomic(gleichzeitigerPfad, '{"wer":"a"}'),
+    writeFileAtomic(gleichzeitigerPfad, '{"wer":"b"}'),
+  ]);
+  fsp.writeFile = echtesWriteFile;
+
+  check('kein echtes Ueberlappen der Schreibvorgaenge', maxGleichzeitig === 1, `max ${maxGleichzeitig}`);
+  check('erster Aufruf erfolgreich', ergebnisA.status === 'fulfilled');
+  check('zweiter Aufruf erfolgreich', ergebnisB.status === 'fulfilled');
+  check('Ergebnis ist gueltiges JSON (kein Mix aus beiden)', (() => {
+    try { JSON.parse(fs.readFileSync(gleichzeitigerPfad, 'utf8')); return true; } catch { return false; }
+  })());
+  check('keine verwaiste .tmp', !fs.existsSync(`${gleichzeitigerPfad}.tmp`));
+
   temp.cleanup();
   finish();
 })();
