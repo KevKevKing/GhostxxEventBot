@@ -27,7 +27,7 @@ const GEPLAUDER = new Set([
 //
 // Genau das ist passiert: "ghost wer ist Fedex Wave" wurde als Tatsache
 // gespeichert, und die naechste Frage galt dann als Widerspruch dazu.
-const ANREDE = /^\s*(hey|hi|hallo|na|ey|eyy|yo|mal|sag mal|sagmal|bitte)?[\s,]*ghost(xx|y|i|muffiin?)?\b[\s,?!]*/i;
+const ANREDE = /^\s*(hey|hi|hallo|na|ey|eyy|yo|mal|sag mal|sagmal|bitte|danke)?[\s,]*ghost(xx|y|i|muffiin?)?\b[\s,?!]*/i;
 
 function ohneAnrede(text) {
   return String(text || '').replace(ANREDE, '').trim();
@@ -83,12 +83,16 @@ function istAussage(text) {
 
   const normalisiert = normalizeText(roh);
   if (GEPLAUDER.has(normalisiert)) return false;
-  if (istLob(roh)) return false;
 
   // Fragen sind keine Ansagen.
   if (roh.endsWith('?')) return false;
 
+  // Die Anrede muss vor der Lob-Pruefung weg: "ghost sehr gut beobachtet"
+  // ist reines Lob, aber istLob() verlangt, dass JEDES Wort im Lob-Vorrat
+  // steht - "ghost" stand dort nicht drin, das Lob fiel durch und landete
+  // als angebliche Tatsache im Gedaechtnis (gemessen, siehe Vorschlag).
   const kern = ohneAnrede(roh);
+  if (istLob(kern)) return false;
   if (kern.length < MIN_LAENGE) return false;
   if (istFrage(kern)) return false;
 

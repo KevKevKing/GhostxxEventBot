@@ -85,6 +85,12 @@ for (const text of [
   'das war wirklich sehr gut gemacht',
   'ja genau so ist richtig',
   'danke dir das war top',
+  // Lob MIT vorangestellter Anrede - fiel vorher durch, weil istLob() auf
+  // dem rohen Text (samt "ghost") statt auf dem Kern geprueft wurde.
+  'ghost sehr gut beobachtet',
+  'ghost, sehr gut beobachtet',
+  'hey ghost das war wirklich sehr gut gemacht',
+  'danke ghost das war top',
 ]) {
   check(`"${text.slice(0, 46)}"`, !istAussage(text), 'wurde faelschlich gemerkt');
 }
