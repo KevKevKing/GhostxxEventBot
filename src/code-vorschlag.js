@@ -21,7 +21,11 @@ const { istNachtruhe } = require('./selbstverbesserung-limit');
 // 2026-09-29-code-vorschlaege-design.md und
 // 2026-09-30-code-vorschlag-automatische-umsetzung-design.md.
 
-const ANFRAGE_ABSTAND_MS = 3 * 60 * 60 * 1000;
+// Kevins ausdruecklicher Wunsch (30.09.), nachdem die ersten vier
+// Vorschlaege alle substanziell waren: kuerzer als die anfaenglichen 3
+// Stunden, damit oefter gefragt wird - aber nicht ganz weg, sonst koennte
+// jede beantwortete Anfrage sofort die naechste ausloesen.
+const ANFRAGE_ABSTAND_MS = 60 * 60 * 1000;
 const VERLAUF_MAX = 100;
 // Discord-DMs vertragen maximal ~2000 Zeichen - ein user.send() darueber
 // wirft. 1800 statt voller 2000 laesst Platz fuer den umgebenden DM-Text

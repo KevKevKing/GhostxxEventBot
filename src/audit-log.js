@@ -128,6 +128,14 @@ function handleAuditEntry(entry, guild) {
     fields.push({ name: 'Anzahl', value: String(entry.extra.count), inline: true });
   }
 
+  // Ghosts eigener Code-Vorschlag (30.09.): bei einer einzeln geloeschten
+  // Nachricht (anders als bei MessageBulkDelete, wo der Kanal schon im
+  // target steht) liefert Discord den Kanal separat in entry.extra - ohne
+  // dieses Feld war nirgends zu sehen, WO geloescht wurde.
+  if (entry.extra?.channel) {
+    fields.push({ name: 'Kanal', value: `<#${entry.extra.channel.id}>`, inline: true });
+  }
+
   logEvent({
     title: mapping.title,
     color: mapping.color,
@@ -151,5 +159,7 @@ function registerAuditLog(client) {
 module.exports = {
   ACTIONS,
   formatChanges,
+  // Nur fuer den Regressionstest exportiert.
+  handleAuditEntry,
   registerAuditLog,
 };
