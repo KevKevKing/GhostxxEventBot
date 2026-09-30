@@ -692,6 +692,14 @@ async function handleMessage(message, client) {
         // automatisch erkanntes Problem (siehe selbstverbesserung.js,
         // bearbeiteProblem()) - laeuft bis zu 20 Minuten, deshalb wie bei
         // Gate 1 im Hintergrund, die DM-Antwort darf nicht darauf warten.
+        // Derselbe Check wie bei Gate 1: laeuft schon eine echte Session,
+        // wuerde sich eine zweite nur die GPU teilen. Reine Komfort-Meldung -
+        // die eigentliche Absicherung gegen zwei gleichzeitige echte
+        // Sessions liegt in bearbeiteProblem() selbst (kernBelegt).
+        if (aktuellerLauf().laeuft) {
+          await reply(message, 'Gerade läuft eine echte Session, das würde sich die Ressourcen teilen - versuch\'s gleich nochmal.');
+          return;
+        }
         await reply(message, 'Gemerkt, ich setz das gleich um.');
         codeVorschlag.setzeVorschlagUm(ausstehend).catch(() => null);
       } else {

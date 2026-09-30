@@ -4,7 +4,7 @@ const { config } = require('./config');
 const { writeFileAtomic } = require('./atomic-write');
 const { logError } = require('./logger');
 const { istAn } = require('./steuerung');
-const { starteVorschlagsSession } = require('./selbstverbesserung-session');
+const { starteVorschlagsSession, TABU_MUSTER } = require('./selbstverbesserung-session');
 const { aktuellerLauf, bearbeiteProblem: bearbeiteProblemEcht } = require('./selbstverbesserung');
 const { istNachtruhe } = require('./selbstverbesserung-limit');
 
@@ -12,10 +12,14 @@ const { istNachtruhe } = require('./selbstverbesserung-limit');
 // Verbesserungsvorschlag machen darf - kein fester Zeitplan, keine
 // Tagesobergrenze. Zwei Zustimmungsstufen statt einer schuetzen davor,
 // dass daraus unbegrenzt haeufige Claude-Code-Sessions werden: erst "darf
-// ich schauen?", dann (nur nach einem Ja) die eigentliche Session, dann
-// nochmal Zustimmung zum fertigen Vorschlag. Keine der beiden Stufen loest
-// jemals eine Code-Aenderung aus - siehe docs/superpowers/specs/
-// 2026-09-29-code-vorschlaege-design.md.
+// ich schauen?", dann (nur nach einem Ja) die eigentliche, LESENDE Session.
+// Stufe 1 loest nie eine Code-Aenderung aus. Stufe 2 (Kevins "ja" zum
+// fertigen Vorschlag) tut das inzwischen sehr wohl - sie ruft dieselbe
+// gehaertete Kette wie ein automatisch erkanntes Problem auf
+// (bearbeiteProblem() in selbstverbesserung.js: Tabu-Pruefung, Tests,
+// eigener Branch, Push, geteiltes 5/Tag-Limit). Siehe docs/superpowers/specs/
+// 2026-09-29-code-vorschlaege-design.md und
+// 2026-09-30-code-vorschlag-automatische-umsetzung-design.md.
 
 const ANFRAGE_ABSTAND_MS = 3 * 60 * 60 * 1000;
 const VERLAUF_MAX = 100;
@@ -174,8 +178,8 @@ async function starteUndSendeVorschlag(dateiPfad, { starteSession = starteVorsch
 
     await sendeDm(
       `${kuerze(ergebnis.vorschlag, VORSCHLAG_TEXT_MAX)}\n\n_Vorschlag zu ${dateiPfad}_\n\n`
-      + 'Antworte mit "ja" oder "nein" - "ja" heisst nur "gute Idee, merken", '
-      + 'ich aendere dadurch noch nichts automatisch.',
+      + 'Antworte mit "ja" oder "nein" - "ja" setzt es um (eigener Branch, zaehlt gegen '
+      + 'das 5/Tag-Limit), "nein" verwirft den Vorschlag.',
     );
 
     const standDanach = await ladeStand();
@@ -214,8 +218,20 @@ async function vermerkeEntscheidung(status) {
  * es ist fuer sie einfach ein problem-Objekt. Wirft nie - Aufrufer
  * (message-handler.js) ruft das per .catch(() => null) im Hintergrund auf.
  */
-async function setzeVorschlagUm(ausstehend, { bearbeiteProblem = bearbeiteProblemEcht } = {}) {
+async function setzeVorschlagUm(ausstehend, { bearbeiteProblem = bearbeiteProblemEcht, sendeDm = sendeDmStandard } = {}) {
   try {
+    // Vor bearbeiteProblem() pruefen, nicht danach: liegt die Datei in einem
+    // Tabu-Bereich, wuerde die echte Session ohnehin per Tabu-Diff-Check in
+    // starteSession() blockiert - aber erst NACHDEM sie schon einen Platz vom
+    // 5/Tag-Limit verbraucht hat. Hier vorher abfangen kostet keinen Slot.
+    if (TABU_MUSTER.some((muster) => ausstehend.datei.startsWith(muster))) {
+      await sendeDm(
+        `Das liegt in einem Tabu-Bereich (siehe CLAUDE.md), den ich nicht automatisch anfassen darf `
+        + `(${ausstehend.datei}) - du müsstest das selbst oder mit Claude Code umsetzen.`,
+      ).catch(() => null);
+      return;
+    }
+
     await bearbeiteProblem({
       titel: `Vorschlag umsetzen: ${ausstehend.datei}`,
       belege: [{ zeit: ausstehend.gesendetAm, grund: ausstehend.vorschlag }],

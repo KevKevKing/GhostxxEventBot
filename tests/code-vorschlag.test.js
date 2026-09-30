@@ -74,7 +74,7 @@ section('naechsteDatei: rotiert durch eine Liste');
   section('setzeVorschlagUm: baut aus dem Vorschlag ein problem-Objekt und ruft bearbeiteProblem auf');
   const aufrufeUmsetzen = [];
   await codeVorschlag.setzeVorschlagUm(
-    { datei: 'src/archiver.js', vorschlag: 'Testabdeckung fuer pruneEvents ergaenzen.', gesendetAm: '2026-09-30T10:00:00.000Z' },
+    { datei: 'src/beispiel-modul.js', vorschlag: 'Testabdeckung fuer pruneEvents ergaenzen.', gesendetAm: '2026-09-30T10:00:00.000Z' },
     {
       bearbeiteProblem: async (problem) => {
         aufrufeUmsetzen.push(problem);
@@ -83,7 +83,7 @@ section('naechsteDatei: rotiert durch eine Liste');
     },
   );
   equal('genau ein Aufruf', aufrufeUmsetzen.length, 1);
-  check('Titel nennt die Datei', aufrufeUmsetzen[0].titel.includes('src/archiver.js'));
+  check('Titel nennt die Datei', aufrufeUmsetzen[0].titel.includes('src/beispiel-modul.js'));
   equal('Beleg enthaelt den Vorschlagstext als Grund', aufrufeUmsetzen[0].belege[0].grund, 'Testabdeckung fuer pruneEvents ergaenzen.');
   equal('Beleg-Zeitpunkt ist der Versandzeitpunkt', aufrufeUmsetzen[0].belege[0].zeit, '2026-09-30T10:00:00.000Z');
 
@@ -98,6 +98,19 @@ section('naechsteDatei: rotiert durch eine Liste');
     hatGeworfen = true;
   }
   check('setzeVorschlagUm faengt Fehler intern ab', !hatGeworfen);
+
+  section('setzeVorschlagUm: Tabu-Datei wird abgelehnt, ohne bearbeiteProblem aufzurufen');
+  const aufrufeTabu = [];
+  const tabuDms = [];
+  await codeVorschlag.setzeVorschlagUm(
+    { datei: 'src/archiver.js', vorschlag: 'x', gesendetAm: '2026-09-30T10:00:00.000Z' },
+    {
+      bearbeiteProblem: async (problem) => { aufrufeTabu.push(problem); return { ok: true }; },
+      sendeDm: async (text) => { tabuDms.push(text); },
+    },
+  );
+  check('bearbeiteProblem wird NICHT aufgerufen', aufrufeTabu.length === 0);
+  check('DM erklaert den Tabu-Bereich', tabuDms.some((t) => t.toLowerCase().includes('tabu')));
 
   temp.cleanup();
   finish();
