@@ -154,5 +154,84 @@ section('Schalter aus -> komplett untaetig');
   check('Dritte Quelle wird abgefragt und ausgeloest', aufrufe5.includes('starteSession:Parser erkennt "swap" wiederholt nicht'));
   check('Laeuft durch dieselbe Kette wie die anderen beiden Quellen', aufrufe5.includes('neuerEintrag') && aufrufe5.includes('benachrichtige'));
 
+  section('bearbeiteProblem(): zwei echte Anlaesse gleichzeitig -> der zweite wird abgelehnt');
+  const { bearbeiteProblem } = require('../src/selbstverbesserung');
+  let ergebnisZweiter = null;
+  const gedaechtnisAufrufeZweiter = [];
+  const ergebnisErster = await bearbeiteProblem(
+    { titel: 'Erstes Problem', belege: [] },
+    {
+      limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => {} },
+      session: {
+        starteSession: async () => {
+          // Waehrend die erste Session "laeuft" (laufendesProblem ist
+          // gesetzt), einen zweiten echten Anlass simulieren - egal ob der
+          // in Wirklichkeit von tick() oder von einem angenommenen
+          // Code-Vorschlag kaeme, bearbeiteProblem darf ihn nicht parallel
+          // durchlassen.
+          ergebnisZweiter = await bearbeiteProblem(
+            { titel: 'Zweites Problem', belege: [] },
+            {
+              limit: { darfLaufen: async () => ({ erlaubt: true }), vermerkeLauf: async () => {} },
+              session: { starteSession: async () => { gedaechtnisAufrufeZweiter.push('starteSession'); return { ok: true }; } },
+              benachrichtigung: { benachrichtige: async () => {}, sendeAusstehende: async () => 0 },
+              gedaechtnis: { neuerEintrag: async () => { gedaechtnisAufrufeZweiter.push('neuerEintrag'); return { id: 'z' }; }, vermerkeSession: async () => {} },
+            },
+          );
+          return { ok: true, branch: 'b', zusammenfassung: 'z' };
+        },
+      },
+      benachrichtigung: { benachrichtige: async () => {}, sendeAusstehende: async () => 0 },
+      gedaechtnis: { neuerEintrag: async () => ({ id: 'e' }), vermerkeSession: async () => {} },
+    },
+  );
+  check('Erster Aufruf laeuft normal durch', ergebnisErster.ok === true);
+  check('Zweiter Aufruf sofort abgelehnt', ergebnisZweiter?.ok === false && ergebnisZweiter?.uebersprungen === true);
+  check('Zweiter Aufruf legt keinen Gedaechtnis-Eintrag an', !gedaechtnisAufrufeZweiter.includes('neuerEintrag'));
+  check('Zweiter Aufruf startet keine Session', !gedaechtnisAufrufeZweiter.includes('starteSession'));
+  check('Nach beiden Aufrufen wieder nichts am Laufen', aktuellerLauf().laeuft === false);
+
+  section('bearbeiteProblem(): TOCTOU-Fenster vor dem Setzen von laufendesProblem ist geschlossen');
+  // Die obige Sektion beweist nur, dass die Sperre greift, NACHDEM
+  // laufendesProblem schon gesetzt ist. Hier starten zwei Aufrufe wirklich
+  // gleichzeitig (Promise.all) und geben beide erst nach einem setImmediate
+  // in limit.darfLaufen() die Kontrolle an den Event-Loop zurueck - genau das
+  // Fenster, in dem frueher beide Aufrufe die erste Pruefung passieren
+  // konnten, bevor einer von ihnen laufendesProblem setzt.
+  const starteSessionAufrufeGleichzeitig = [];
+  const macheLimit = () => ({
+    darfLaufen: async () => {
+      await new Promise((r) => setImmediate(r));
+      return { erlaubt: true };
+    },
+    vermerkeLauf: async () => {},
+  });
+  const gemeinsameAbhaengigkeiten = () => ({
+    session: {
+      starteSession: async () => {
+        starteSessionAufrufeGleichzeitig.push('starteSession');
+        return { ok: true, branch: 'b', zusammenfassung: 'z' };
+      },
+    },
+    benachrichtigung: { benachrichtige: async () => {}, sendeAusstehende: async () => 0 },
+    gedaechtnis: { neuerEintrag: async () => ({ id: 'gleichzeitig' }), vermerkeSession: async () => {} },
+  });
+
+  const [gleichzeitigA, gleichzeitigB] = await Promise.all([
+    bearbeiteProblem({ titel: 'Gleichzeitig A', belege: [] }, { limit: macheLimit(), ...gemeinsameAbhaengigkeiten() }),
+    bearbeiteProblem({ titel: 'Gleichzeitig B', belege: [] }, { limit: macheLimit(), ...gemeinsameAbhaengigkeiten() }),
+  ]);
+  const ergebnisseGleichzeitig = [gleichzeitigA, gleichzeitigB];
+  check('starteSession genau einmal aufgerufen', starteSessionAufrufeGleichzeitig.length === 1);
+  check(
+    'genau einer der beiden Aufrufe wurde uebersprungen',
+    ergebnisseGleichzeitig.filter((e) => e.ok === false && e.uebersprungen === true).length === 1,
+  );
+  check(
+    'der andere Aufruf lief normal durch',
+    ergebnisseGleichzeitig.filter((e) => e.ok === true).length === 1,
+  );
+  check('Nach dem gleichzeitigen Lauf wieder nichts am Laufen', aktuellerLauf().laeuft === false);
+
   finish();
 })();

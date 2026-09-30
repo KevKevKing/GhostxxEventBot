@@ -14,12 +14,129 @@ const TICK_MS = 10 * 60 * 1000;
 let laufendesProblem = null;
 let laufSeit = null;
 
+// Rein interne Sperre gegen ein TOCTOU-Fenster: die Pruefung oben
+// (laufendesProblem) und das tatsaechliche Setzen von laufendesProblem liegen
+// mehrere awaits auseinander (Tageslimit, Gedaechtnis-Eintrag,
+// vermerkeLauf). Zwei fast gleichzeitige Aufrufe (zwei "ja"-DMs kurz
+// hintereinander, oder ein automatischer tick() waehrend ein angenommener
+// Code-Vorschlag noch in diesem Fenster steckt) koennten beide die Pruefung
+// passieren, bevor der erste laufendesProblem setzt. kernBelegt wird deshalb
+// SYNCHRON, ohne dazwischenliegenden await, direkt bei Eintritt gesetzt und
+// erst am Ende der gesamten Funktion (finally) wieder freigegeben - anders
+// als laufendesProblem/laufSeit, die weiterhin nur die tatsaechliche
+// Session-Laufzeit fuers Dashboard abbilden und sich dadurch nicht aendern.
+let kernBelegt = false;
+
 function aktuellerLauf() {
   return {
     laeuft: Boolean(laufendesProblem),
     problem: laufendesProblem,
     seit: laufSeit,
   };
+}
+
+/**
+ * Der eigentliche Kern: Tageslimit pruefen, Gedaechtnis-Eintrag anlegen,
+ * die echte, code-schreibende Session starten, Ergebnis vermerken und
+ * per DM melden. Fruehe frueher Teil von tick() - jetzt eigenstaendig,
+ * weil es zwei Aufrufer gibt: tick() selbst (automatisch erkannte
+ * Probleme) und ein angenommener Code-Vorschlag (siehe code-vorschlag.js,
+ * setzeVorschlagUm()). Beide teilen sich dieselbe Sicherheitskette,
+ * dasselbe Tageslimit und dieselbe Sperre gegen zwei gleichzeitig
+ * laufende echte Sessions.
+ */
+async function bearbeiteProblem(problem, {
+  limit = limitEcht,
+  session = sessionEcht,
+  benachrichtigung = benachrichtigungEcht,
+  gedaechtnis = gedaechtnisEcht,
+} = {}) {
+  // Nur EIN Aufrufer der Kette hatte es bisher gegeben (tick() selbst,
+  // schon durch die eigene laeuft-Waechtervariable in
+  // startSelbstverbesserung() gegen Ueberlappung mit sich selbst
+  // geschuetzt). Mit einem zweiten Aufrufer (ein angenommener
+  // Code-Vorschlag) reicht das nicht mehr - diese Pruefung muss hier,
+  // im gemeinsamen Kern, stehen.
+  if (laufendesProblem || kernBelegt) {
+    return { ok: false, uebersprungen: true };
+  }
+  // Synchron, ohne await dazwischen: schliesst das Fenster zwischen dieser
+  // Pruefung und dem spaeteren Setzen von laufendesProblem (das erst nach
+  // limit.darfLaufen()/gedaechtnis.neuerEintrag()/limit.vermerkeLauf() kommt).
+  kernBelegt = true;
+
+  try {
+    const stand = await limit.darfLaufen();
+    if (!stand.erlaubt) {
+      // Frueher: einfach return. Damit wurde derselbe Fund alle 10 Minuten neu
+      // erkannt und lautlos weggeworfen - Kevin erfuhr nie, dass Ghostxx etwas
+      // gesehen hat. Jetzt gibt es einen Gedaechtnis-Eintrag (Status 'offen',
+      // damit istBekannt() das Nachfragen auf EINMAL begrenzt) und genau eine
+      // DM. Gestartet wird nichts, also wird auch kein Lauf vermerkt.
+      try {
+        const { id } = await gedaechtnis.neuerEintrag(problem);
+        const ergebnis = {
+          ok: false,
+          branch: '',
+          zusammenfassung: '',
+          fehler: 'Tageslimit erreicht (5/Tag) - nicht automatisch bearbeitet.',
+        };
+        await gedaechtnis.vermerkeSession(id, ergebnis);
+        await benachrichtigung.benachrichtige({ problem, ergebnis });
+      } catch (error) {
+        console.error('Selbstverbesserung: Tageslimit-Meldung fehlgeschlagen:', error);
+        logError('Fehler in der Selbstverbesserungs-Kette', error);
+      }
+      return { ok: false, fehler: 'tageslimit' };
+    }
+
+    // Ab hier haengt am Gedaechtnis-Eintrag (Status 'offen') die 14-Tage-Sperre
+    // von istBekannt(): stuerzt irgendein Schritt hier ab, MUSS der Eintrag auf
+    // 'ignoriert' gesetzt werden - sonst gilt ein echtes, wiederkehrendes
+    // Problem 14 Tage lang lautlos als "schon bekannt" und wird nie wieder
+    // gemeldet. 'abgelehnt' waere hier falsch, das blockiert genauso wie
+    // 'offen' - es war aber kein echtes Ablehnen, nur ein interner Fehler.
+    let id;
+    try {
+      ({ id } = await gedaechtnis.neuerEintrag(problem));
+
+      // Der VERSUCH zaehlt, nicht der Erfolg - und er zaehlt, bevor er beginnt.
+      // Frueher stand das am Ende der Kette: ein dauerhafter Fehler (kaputte
+      // JSON-Datei o.ae.) liess damit endlos ungezaehlte 20-Minuten-Sessions
+      // alle 10 Minuten laufen, ohne je das Tageslimit zu erreichen. Das ist
+      // die richtige Semantik fuer einen Drosselzaehler.
+      await limit.vermerkeLauf();
+
+      let ergebnis;
+      laufendesProblem = problem.titel;
+      laufSeit = Date.now();
+      try {
+        ergebnis = await session.starteSession(problem);
+      } finally {
+        // Egal ob Erfolg, Fehler oder Zeitueberschreitung: die Anzeige darf
+        // nicht haengen bleiben, sonst behauptet das Dashboard stundenlang
+        // einen Lauf, den es nicht mehr gibt.
+        laufendesProblem = null;
+        laufSeit = null;
+      }
+
+      await gedaechtnis.vermerkeSession(id, ergebnis);
+      await benachrichtigung.benachrichtige({ problem, ergebnis });
+      return ergebnis;
+    } catch (error) {
+      console.error('Selbstverbesserung-Fehler in der Kette:', error);
+      logError('Fehler in der Selbstverbesserungs-Kette', error);
+      if (id) {
+        await gedaechtnis.vermerkeEntscheidung(id, {
+          status: 'ignoriert',
+          grund: 'Interner Fehler waehrend der Selbstverbesserung: ' + error.message,
+        });
+      }
+      return { ok: false, fehler: error.message };
+    }
+  } finally {
+    kernBelegt = false;
+  }
 }
 
 /**
@@ -50,72 +167,7 @@ async function tick({
     || (await beobachten.parserFehlschlagErkannt());
   if (!problem) return;
 
-  const stand = await limit.darfLaufen();
-  if (!stand.erlaubt) {
-    // Frueher: einfach return. Damit wurde derselbe Fund alle 10 Minuten neu
-    // erkannt und lautlos weggeworfen - Kevin erfuhr nie, dass Ghostxx etwas
-    // gesehen hat. Jetzt gibt es einen Gedaechtnis-Eintrag (Status 'offen',
-    // damit istBekannt() das Nachfragen auf EINMAL begrenzt) und genau eine
-    // DM. Gestartet wird nichts, also wird auch kein Lauf vermerkt.
-    try {
-      const { id } = await gedaechtnis.neuerEintrag(problem);
-      const ergebnis = {
-        ok: false,
-        branch: '',
-        zusammenfassung: '',
-        fehler: 'Tageslimit erreicht (5/Tag) - nicht automatisch bearbeitet.',
-      };
-      await gedaechtnis.vermerkeSession(id, ergebnis);
-      await benachrichtigung.benachrichtige({ problem, ergebnis });
-    } catch (error) {
-      console.error('Selbstverbesserung: Tageslimit-Meldung fehlgeschlagen:', error);
-      logError('Fehler in der Selbstverbesserungs-Kette', error);
-    }
-    return;
-  }
-
-  // Ab hier haengt am Gedaechtnis-Eintrag (Status 'offen') die 14-Tage-Sperre
-  // von istBekannt(): stuerzt irgendein Schritt hier ab, MUSS der Eintrag auf
-  // 'ignoriert' gesetzt werden - sonst gilt ein echtes, wiederkehrendes
-  // Problem 14 Tage lang lautlos als "schon bekannt" und wird nie wieder
-  // gemeldet. 'abgelehnt' waere hier falsch, das blockiert genauso wie
-  // 'offen' - es war aber kein echtes Ablehnen, nur ein interner Fehler.
-  let id;
-  try {
-    ({ id } = await gedaechtnis.neuerEintrag(problem));
-
-    // Der VERSUCH zaehlt, nicht der Erfolg - und er zaehlt, bevor er beginnt.
-    // Frueher stand das am Ende der Kette: ein dauerhafter Fehler (kaputte
-    // JSON-Datei o.ae.) liess damit endlos ungezaehlte 20-Minuten-Sessions
-    // alle 10 Minuten laufen, ohne je das Tageslimit zu erreichen. Das ist
-    // die richtige Semantik fuer einen Drosselzaehler.
-    await limit.vermerkeLauf();
-
-    let ergebnis;
-    laufendesProblem = problem.titel;
-    laufSeit = Date.now();
-    try {
-      ergebnis = await session.starteSession(problem);
-    } finally {
-      // Egal ob Erfolg, Fehler oder Zeitueberschreitung: die Anzeige darf
-      // nicht haengen bleiben, sonst behauptet das Dashboard stundenlang
-      // einen Lauf, den es nicht mehr gibt.
-      laufendesProblem = null;
-      laufSeit = null;
-    }
-
-    await gedaechtnis.vermerkeSession(id, ergebnis);
-    await benachrichtigung.benachrichtige({ problem, ergebnis });
-  } catch (error) {
-    console.error('Selbstverbesserung-Fehler in der Kette:', error);
-    logError('Fehler in der Selbstverbesserungs-Kette', error);
-    if (id) {
-      await gedaechtnis.vermerkeEntscheidung(id, {
-        status: 'ignoriert',
-        grund: 'Interner Fehler waehrend der Selbstverbesserung: ' + error.message,
-      });
-    }
-  }
+  await bearbeiteProblem(problem, { limit, session, benachrichtigung, gedaechtnis });
 }
 
 function startSelbstverbesserung(client) {
@@ -153,6 +205,7 @@ function startSelbstverbesserung(client) {
 
 module.exports = {
   aktuellerLauf,
+  bearbeiteProblem,
   startSelbstverbesserung,
   tick,
 };

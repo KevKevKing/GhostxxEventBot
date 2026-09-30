@@ -71,6 +71,47 @@ section('naechsteDatei: rotiert durch eine Liste');
   equal('"Jahreswechsel" ist KEIN ja', codeVorschlag.werteAntwortAus('Jahreswechsel'), null);
   equal('unrelated Text -> null', codeVorschlag.werteAntwortAus('wann ist das naechste Event?'), null);
 
+  section('setzeVorschlagUm: baut aus dem Vorschlag ein problem-Objekt und ruft bearbeiteProblem auf');
+  const aufrufeUmsetzen = [];
+  await codeVorschlag.setzeVorschlagUm(
+    { datei: 'src/beispiel-modul.js', vorschlag: 'Testabdeckung fuer pruneEvents ergaenzen.', gesendetAm: '2026-09-30T10:00:00.000Z' },
+    {
+      bearbeiteProblem: async (problem) => {
+        aufrufeUmsetzen.push(problem);
+        return { ok: true, branch: 'b', zusammenfassung: 'z' };
+      },
+    },
+  );
+  equal('genau ein Aufruf', aufrufeUmsetzen.length, 1);
+  check('Titel nennt die Datei', aufrufeUmsetzen[0].titel.includes('src/beispiel-modul.js'));
+  equal('Beleg enthaelt den Vorschlagstext als Grund', aufrufeUmsetzen[0].belege[0].grund, 'Testabdeckung fuer pruneEvents ergaenzen.');
+  equal('Beleg-Zeitpunkt ist der Versandzeitpunkt', aufrufeUmsetzen[0].belege[0].zeit, '2026-09-30T10:00:00.000Z');
+
+  section('setzeVorschlagUm: wirft nie, auch wenn bearbeiteProblem wirft');
+  let hatGeworfen = false;
+  try {
+    await codeVorschlag.setzeVorschlagUm(
+      { datei: 'src/xyz.js', vorschlag: 'x', gesendetAm: '2026-09-30T10:00:00.000Z' },
+      { bearbeiteProblem: async () => { throw new Error('kaputt'); } },
+    );
+  } catch {
+    hatGeworfen = true;
+  }
+  check('setzeVorschlagUm faengt Fehler intern ab', !hatGeworfen);
+
+  section('setzeVorschlagUm: Tabu-Datei wird abgelehnt, ohne bearbeiteProblem aufzurufen');
+  const aufrufeTabu = [];
+  const tabuDms = [];
+  await codeVorschlag.setzeVorschlagUm(
+    { datei: 'src/archiver.js', vorschlag: 'x', gesendetAm: '2026-09-30T10:00:00.000Z' },
+    {
+      bearbeiteProblem: async (problem) => { aufrufeTabu.push(problem); return { ok: true }; },
+      sendeDm: async (text) => { tabuDms.push(text); },
+    },
+  );
+  check('bearbeiteProblem wird NICHT aufgerufen', aufrufeTabu.length === 0);
+  check('DM erklaert den Tabu-Bereich', tabuDms.some((t) => t.toLowerCase().includes('tabu')));
+
   temp.cleanup();
   finish();
 })();

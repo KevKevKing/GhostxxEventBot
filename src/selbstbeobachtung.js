@@ -25,12 +25,13 @@ const EIGENE_FEHLER = [
   'Fehler in der Selbstverbesserungs-Kette',
   'Fehler in der Selbstverbesserung',
   // Code-Vorschlaege (src/code-vorschlag.js) sind derselbe Mechanismus mit
-  // demselben Risiko: ohne diese beiden Titel wuerden wiederholte eigene
-  // Fehler beim Vorschlagen eine echte, code-schreibende Session gegen sich
-  // selbst ausloesen - genau das, wovor diese Liste schon die echte
-  // Selbstverbesserung schuetzt.
+  // demselben Risiko: ohne diese Titel wuerden wiederholte eigene Fehler
+  // beim Vorschlagen oder beim Umsetzen eine echte, code-schreibende
+  // Session gegen sich selbst ausloesen - genau das, wovor diese Liste
+  // schon die echte Selbstverbesserung schuetzt.
   'Fehler beim Code-Vorschlag',
   'Fehler beim Code-Vorschlag (Session)',
+  'Fehler beim Code-Vorschlag (Umsetzung)',
 ];
 
 const verlaufDatei = path.join(config.dataDir, 'selbstbeobachtung-verlauf.json');
