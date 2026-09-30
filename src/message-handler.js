@@ -687,7 +687,16 @@ async function handleMessage(message, client) {
       }
 
       await codeVorschlag.vermerkeEntscheidung(istJa ? 'angenommen' : 'abgelehnt');
-      await reply(message, istJa ? 'Gemerkt, danke.' : 'Auch gut, verworfen.');
+      if (istJa) {
+        // Setzt den Vorschlag ueber dieselbe echte Kette um wie ein
+        // automatisch erkanntes Problem (siehe selbstverbesserung.js,
+        // bearbeiteProblem()) - laeuft bis zu 20 Minuten, deshalb wie bei
+        // Gate 1 im Hintergrund, die DM-Antwort darf nicht darauf warten.
+        await reply(message, 'Gemerkt, ich setz das gleich um.');
+        codeVorschlag.setzeVorschlagUm(ausstehend).catch(() => null);
+      } else {
+        await reply(message, 'Auch gut, verworfen.');
+      }
       return;
     }
   }
