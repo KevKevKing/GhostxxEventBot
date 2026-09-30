@@ -5,7 +5,7 @@ const { writeFileAtomic } = require('./atomic-write');
 const { logError } = require('./logger');
 const { istAn } = require('./steuerung');
 const { starteVorschlagsSession } = require('./selbstverbesserung-session');
-const { aktuellerLauf } = require('./selbstverbesserung');
+const { aktuellerLauf, bearbeiteProblem: bearbeiteProblemEcht } = require('./selbstverbesserung');
 const { istNachtruhe } = require('./selbstverbesserung-limit');
 
 // Ghost darf von sich aus fragen, ob er sich eine Datei anschauen und einen
@@ -204,6 +204,28 @@ async function vermerkeEntscheidung(status) {
   await speichereStand(stand);
 }
 
+/**
+ * Kevin hat "ja" zum fertigen Vorschlag (Gate 2) gesagt: das setzt ihn
+ * jetzt tatsaechlich um, ueber dieselbe gehaertete Kette wie ein
+ * automatisch erkanntes Problem (Tabu-Pfade, Tests, Branch, Push,
+ * geteiltes 5/Tag-Limit). Der Vorschlagstext wird dabei zum "Beleg" -
+ * bearbeiteProblem() kennt den Unterschied zwischen "Auslöser war ein
+ * echter Fehler" und "Auslöser war ein angenommener Vorschlag" nicht,
+ * es ist fuer sie einfach ein problem-Objekt. Wirft nie - Aufrufer
+ * (message-handler.js) ruft das per .catch(() => null) im Hintergrund auf.
+ */
+async function setzeVorschlagUm(ausstehend, { bearbeiteProblem = bearbeiteProblemEcht } = {}) {
+  try {
+    await bearbeiteProblem({
+      titel: `Vorschlag umsetzen: ${ausstehend.datei}`,
+      belege: [{ zeit: ausstehend.gesendetAm, grund: ausstehend.vorschlag }],
+    });
+  } catch (error) {
+    console.error('Code-Vorschlag (Umsetzung) fehlgeschlagen:', error.message);
+    logError('Fehler beim Code-Vorschlag (Umsetzung)', error);
+  }
+}
+
 async function tick() {
   try {
     if (!istAn('selbstverbesserung')) return;
@@ -244,6 +266,7 @@ module.exports = {
   naechsteDatei,
   sendeAnfrage,
   setClient,
+  setzeVorschlagUm,
   startCodeVorschlag,
   starteUndSendeVorschlag,
   vermerkeAbgelehnteAnfrage,
