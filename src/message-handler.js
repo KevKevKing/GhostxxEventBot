@@ -912,11 +912,16 @@ async function handleMessage(message, client) {
     await reply(message, fehler);
 
     // Faellt Ollama aus, merkt das sonst niemand ausser der Person, die gerade
-    // geschrieben hat. Einmal pro Viertelstunde reicht als Hinweis.
+    // geschrieben hat. Einmal pro Viertelstunde reicht als Hinweis - deshalb
+    // hier ausdruecklich minIntervalMs statt des generischen, nur zehn
+    // Sekunden langen Schleifenschutzes (Ghosts eigener Code-Vorschlag,
+    // 30.09.: ohne das haette bei mehreren Nachrichten waehrend eines
+    // laengeren Ausfalls fast jede einzelne eine eigene Erwaehnung ausgeloest).
     await askOwner({
       question: 'Ich komme gerade nicht ans Sprachmodell.',
       detail: result.timedOut ? 'Zeitüberschreitung bei Ollama.' : `Fehler: ${result.error}`,
       key: 'ollama-weg',
+      minIntervalMs: 15 * 60 * 1000,
       message,
     }).catch(() => null);
 

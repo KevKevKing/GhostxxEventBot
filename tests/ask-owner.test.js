@@ -60,6 +60,24 @@ function pings() {
   check('durchgelassen', gesendet.length === stand + 2);
   check('  mit Erwähnung', gesendet.at(-1).content.includes(config.notifyUserId));
 
+  section('minIntervalMs: eigene Sperrzeit statt des generischen Zehn-Sekunden-Schutzes');
+  // Ghosts eigener Code-Vorschlag (30.09.): ein Aufrufer, der denselben key
+  // als echten Drosseler nutzt (z.B. "einmal pro Viertelstunde"), braucht
+  // eine laengere Sperre als der generische Schleifenschutz.
+  const standLang = gesendet.length;
+  await askOwner({ question: 'Ollama ist weg', key: 'lange-sperre', minIntervalMs: 60 * 60 * 1000 });
+  check('erste Frage geht raus', gesendet.length === standLang + 1);
+  for (let i = 0; i < 5; i += 1) {
+    // eslint-disable-next-line no-await-in-loop
+    await askOwner({ question: 'Ollama ist weg', key: 'lange-sperre', minIntervalMs: 60 * 60 * 1000 });
+  }
+  check('bleibt trotz mehrfachem Aufruf gesperrt (Stunde statt 10s)', gesendet.length === standLang + 1);
+
+  section('Ohne minIntervalMs bleibt es beim generischen Schutz');
+  const standKurz = gesendet.length;
+  await askOwner({ question: 'Andere Frage ohne eigene Sperrzeit', key: 'kurze-sperre' });
+  check('geht raus', gesendet.length === standKurz + 1);
+
   section('Ohne Frage passiert nichts');
   const letzterStand = gesendet.length;
   await askOwner({ question: '' });

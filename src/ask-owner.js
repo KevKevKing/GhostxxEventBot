@@ -10,6 +10,12 @@ const { config } = require('./config');
 // Er darf so oft fragen und erwaehnen, wie er will. Die einzige Bremse ist ein
 // Schutz gegen Endlosschleifen: dieselbe Frage nicht zweimal in zehn Sekunden.
 // Das faengt einen Programmfehler ab, ohne ihn im Alltag einzuschraenken.
+//
+// Ghosts eigener Code-Vorschlag (30.09.): manche Aufrufer nutzen denselben
+// `key` aber bewusst als echten Drosseler ueber laengere Zeit (z.B. beim
+// Ollama-Ausfall in message-handler.js, "einmal pro Viertelstunde"). Dafuer
+// gibt es `minIntervalMs` - der generische Zehn-Sekunden-Schutz bleibt fuer
+// alle anderen Aufrufer unveraendert der Standard.
 
 const LOOP_GUARD_MS = Number(process.env.ASK_LOOP_GUARD_MS || 10 * 1000);
 
@@ -21,8 +27,8 @@ function setAskClient(client) {
 }
 
 function pruneHistory(now) {
-  for (const [key, at] of recentQuestions) {
-    if (now - at > LOOP_GUARD_MS) recentQuestions.delete(key);
+  for (const [key, eintrag] of recentQuestions) {
+    if (now - eintrag.at > eintrag.minIntervalMs) recentQuestions.delete(key);
   }
 }
 
@@ -39,8 +45,14 @@ function buildJumpLink(message) {
  * @param {string} [options.detail]  Warum er fragt.
  * @param {object} [options.message] Die ausloesende Discord-Nachricht.
  * @param {string} [options.key]     Zum Zusammenfassen gleicher Faelle.
+ * @param {number} [options.minIntervalMs] Eigene Sperrzeit statt LOOP_GUARD_MS
+ *   fuer diesen einen Aufruf - fuer Aufrufer, die denselben `key` bewusst als
+ *   echten Drosseler nutzen (siehe message-handler.js, 'ollama-weg'), nicht
+ *   nur als Schutz gegen eine enge Schleife.
  */
-async function askOwner({ question, detail = '', message = null, key = '' }) {
+async function askOwner({
+  question, detail = '', message = null, key = '', minIntervalMs = LOOP_GUARD_MS,
+}) {
   if (!clientRef || !config.botHomeChannelId || !question) return false;
 
   const now = Date.now();
@@ -48,7 +60,7 @@ async function askOwner({ question, detail = '', message = null, key = '' }) {
 
   const dedupeKey = key || question;
   if (recentQuestions.has(dedupeKey)) return false;
-  recentQuestions.set(dedupeKey, now);
+  recentQuestions.set(dedupeKey, { at: now, minIntervalMs });
 
   const channel = await clientRef.channels.fetch(config.botHomeChannelId).catch(() => null);
   if (!channel || !channel.isTextBased()) return false;
