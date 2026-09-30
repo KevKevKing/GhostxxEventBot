@@ -23,32 +23,30 @@ function aktuellerLauf() {
 }
 
 /**
- * Eine Runde: verstehen (Beobachter) -> lernen (Gedaechtnis pruefen,
- * Session starten) -> anwenden bleibt bei Kevin (nur Vorschlag+DM).
- *
- * Alle Abhaengigkeiten per Parameter, damit der Test keine echten
- * Prozesse/Discord-Aufrufe braucht.
+ * Der eigentliche Kern: Tageslimit pruefen, Gedaechtnis-Eintrag anlegen,
+ * die echte, code-schreibende Session starten, Ergebnis vermerken und
+ * per DM melden. Fruehe frueher Teil von tick() - jetzt eigenstaendig,
+ * weil es zwei Aufrufer gibt: tick() selbst (automatisch erkannte
+ * Probleme) und ein angenommener Code-Vorschlag (siehe code-vorschlag.js,
+ * setzeVorschlagUm()). Beide teilen sich dieselbe Sicherheitskette,
+ * dasselbe Tageslimit und dieselbe Sperre gegen zwei gleichzeitig
+ * laufende echte Sessions.
  */
-async function tick({
-  beobachten = beobachtungEcht,
+async function bearbeiteProblem(problem, {
   limit = limitEcht,
   session = sessionEcht,
   benachrichtigung = benachrichtigungEcht,
   gedaechtnis = gedaechtnisEcht,
-  schalterAn = istAn,
 } = {}) {
-  // Der Schalter steht standardmaessig auf AUS (siehe steuerung.js). Solange
-  // er aus ist, passiert hier gar nichts - auch keine nachgereichten DMs.
-  // Kevin schaltet ihn im Dashboard ein, wenn er die drei Handpruefungen
-  // aus dem Plan gemacht hat.
-  if (!schalterAn('selbstverbesserung')) return;
-
-  await benachrichtigung.sendeAusstehende();
-
-  const problem = (await beobachten.crashSchleifeErkannt())
-    || (await beobachten.erkenneProblem())
-    || (await beobachten.parserFehlschlagErkannt());
-  if (!problem) return;
+  // Nur EIN Aufrufer der Kette hatte es bisher gegeben (tick() selbst,
+  // schon durch die eigene laeuft-Waechtervariable in
+  // startSelbstverbesserung() gegen Ueberlappung mit sich selbst
+  // geschuetzt). Mit einem zweiten Aufrufer (ein angenommener
+  // Code-Vorschlag) reicht das nicht mehr - diese Pruefung muss hier,
+  // im gemeinsamen Kern, stehen.
+  if (laufendesProblem) {
+    return { ok: false, uebersprungen: true };
+  }
 
   const stand = await limit.darfLaufen();
   if (!stand.erlaubt) {
@@ -71,7 +69,7 @@ async function tick({
       console.error('Selbstverbesserung: Tageslimit-Meldung fehlgeschlagen:', error);
       logError('Fehler in der Selbstverbesserungs-Kette', error);
     }
-    return;
+    return { ok: false, fehler: 'tageslimit' };
   }
 
   // Ab hier haengt am Gedaechtnis-Eintrag (Status 'offen') die 14-Tage-Sperre
@@ -106,6 +104,7 @@ async function tick({
 
     await gedaechtnis.vermerkeSession(id, ergebnis);
     await benachrichtigung.benachrichtige({ problem, ergebnis });
+    return ergebnis;
   } catch (error) {
     console.error('Selbstverbesserung-Fehler in der Kette:', error);
     logError('Fehler in der Selbstverbesserungs-Kette', error);
@@ -115,7 +114,39 @@ async function tick({
         grund: 'Interner Fehler waehrend der Selbstverbesserung: ' + error.message,
       });
     }
+    return { ok: false, fehler: error.message };
   }
+}
+
+/**
+ * Eine Runde: verstehen (Beobachter) -> lernen (Gedaechtnis pruefen,
+ * Session starten) -> anwenden bleibt bei Kevin (nur Vorschlag+DM).
+ *
+ * Alle Abhaengigkeiten per Parameter, damit der Test keine echten
+ * Prozesse/Discord-Aufrufe braucht.
+ */
+async function tick({
+  beobachten = beobachtungEcht,
+  limit = limitEcht,
+  session = sessionEcht,
+  benachrichtigung = benachrichtigungEcht,
+  gedaechtnis = gedaechtnisEcht,
+  schalterAn = istAn,
+} = {}) {
+  // Der Schalter steht standardmaessig auf AUS (siehe steuerung.js). Solange
+  // er aus ist, passiert hier gar nichts - auch keine nachgereichten DMs.
+  // Kevin schaltet ihn im Dashboard ein, wenn er die drei Handpruefungen
+  // aus dem Plan gemacht hat.
+  if (!schalterAn('selbstverbesserung')) return;
+
+  await benachrichtigung.sendeAusstehende();
+
+  const problem = (await beobachten.crashSchleifeErkannt())
+    || (await beobachten.erkenneProblem())
+    || (await beobachten.parserFehlschlagErkannt());
+  if (!problem) return;
+
+  await bearbeiteProblem(problem, { limit, session, benachrichtigung, gedaechtnis });
 }
 
 function startSelbstverbesserung(client) {
@@ -153,6 +184,7 @@ function startSelbstverbesserung(client) {
 
 module.exports = {
   aktuellerLauf,
+  bearbeiteProblem,
   startSelbstverbesserung,
   tick,
 };
