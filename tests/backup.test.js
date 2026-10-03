@@ -56,6 +56,22 @@ function tagVor(tage) {
   const dritte = await sichern({ force: true, now: heute });
   check('.tmp nicht mitgenommen', dritte.dateien === 4, String(dritte.dateien));
 
+  section('Abgesturzte Sicherung zaehlt nicht als fertig');
+  // Simuliert einen Absturz nach mkdir, aber vor dem Umbenennen: nur der
+  // Staging-Ordner existiert, mit einem Rest aus dem Absturz drin.
+  const tagAbsturz = tagVor(2);
+  const zielAbsturz = path.join(backupRoot, tagAbsturz);
+  fs.mkdirSync(`${zielAbsturz}.tmp`, { recursive: true });
+  fs.writeFileSync(path.join(`${zielAbsturz}.tmp`, 'events.json'), 'kaputt');
+
+  const nachgeholt = await sichern({ now: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) });
+  check('nicht als uebersprungen gewertet', nachgeholt.uebersprungen !== true);
+  check('vollstaendig kopiert', nachgeholt.dateien === 4, String(nachgeholt.dateien));
+  check('fertiger Ordner da', fs.existsSync(zielAbsturz));
+  check('Staging-Rest weg', !fs.existsSync(`${zielAbsturz}.tmp`));
+  const geretteterInhalt = JSON.parse(fs.readFileSync(path.join(zielAbsturz, 'events.json'), 'utf8'));
+  check('Inhalt frisch, nicht der Absturz-Rest', geretteterInhalt.events[0].id === 'a');
+
   section('Alte Sicherungen verfallen');
   for (const tage of [1, 5, 13, 15, 40]) {
     fs.mkdirSync(path.join(backupRoot, tagVor(tage)), { recursive: true });

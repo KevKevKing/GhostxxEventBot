@@ -2,6 +2,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const { config } = require('./config');
 const { logBotEvent, logError } = require('./logger');
+const { renameWithRetry } = require('./atomic-write');
 
 // Taegliche Sicherung von data/.
 //
@@ -75,17 +76,30 @@ async function sichern({ force = false, now = new Date() } = {}) {
     const dateien = await sammleDateien(config.dataDir);
     if (!dateien.length) return { ok: true, uebersprungen: true, dateien: 0 };
 
-    await fs.mkdir(ziel, { recursive: true });
+    // Erst in einen Staging-Ordner kopieren, dann umbenennen - sonst gilt der
+    // Tag schon als fertig, sobald der Ordner existiert (Zeile 71), auch wenn
+    // der Bot mitten in der Kopierschleife abstuerzt. So existiert `ziel` per
+    // Konstruktion erst, wenn die Sicherung vollstaendig ist.
+    const zielTmp = `${ziel}.tmp`;
+    await fs.rm(zielTmp, { recursive: true, force: true });
+    await fs.mkdir(zielTmp, { recursive: true });
 
     let bytes = 0;
     for (const relativ of dateien) {
       const von = path.join(config.dataDir, relativ);
-      const nach = path.join(ziel, relativ);
+      const nach = path.join(zielTmp, relativ);
 
       await fs.mkdir(path.dirname(nach), { recursive: true });
       await fs.copyFile(von, nach);
       bytes += (await fs.stat(nach)).size;
     }
+
+    // Bei einem erneuten Lauf mit force (z.B. von Hand angestossen) existiert
+    // `ziel` schon aus einer frueheren, vollstaendigen Sicherung - rename
+    // scheitert dann an einem bereits vorhandenen Ziel. Die alte Fassung darf
+    // erst weg, wenn die neue komplett im Staging-Ordner steht (siehe oben).
+    await fs.rm(ziel, { recursive: true, force: true });
+    await renameWithRetry(zielTmp, ziel);
 
     const geloescht = await aufraeumen(now);
     return { ok: true, ziel, dateien: dateien.length, bytes, geloescht };
